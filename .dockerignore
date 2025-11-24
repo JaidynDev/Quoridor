@@ -1,0 +1,15 @@
+.git
+.gitignore
+.metadata
+.idea/
+.vscode/
+build/
+android/
+ios/
+test/
+.dart_tool/
+.pub-cache/
+.pub/
+doc/
+flake.nix
+flake.lock
