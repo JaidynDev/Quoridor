@@ -56,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Text('Quoridor'),
             const SizedBox(width: 8),
             Text(
-              'v1.0.6',
+              'v1.0.7',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
