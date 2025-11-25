@@ -440,58 +440,53 @@ class _GameBoardState extends State<GameBoard> {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            // Shadow/Base
+            // 1. Shadow/Base
             Container(
               width: width,
               height: height,
               color: Colors.black26,
             ),
-            // The Wall Body (Standing up)
+            
+            // 2. Top Cap (Raised to wallHeight)
+            Transform(
+              transform: Matrix4.identity()..translateByVector3(Vector3(0.0, 0.0, wallHeight)),
+              child: Container(
+                 width: width,
+                 height: height,
+                 decoration: BoxDecoration(
+                   color: Color.lerp(color, Colors.white, 0.3),
+                   borderRadius: BorderRadius.circular(2),
+                 ),
+              ),
+            ),
+
+            // 3. Face (Vertical)
+            // Rendered as if for Guest (P2, Bottom). Flipped view will auto-correct for Host.
+            // Pivot at Bottom Edge (height), Rotate 90 deg to stand up (Y->Z)
             Transform(
               transform: Matrix4.identity()
-                ..translateByVector3(Vector3(0.0, height, 0.0)) // Move to bottom of footprint
-                ..rotateX(-math.pi / 2) // Rotate 90 deg to stand up
-                ..translateByVector3(Vector3(0.0, -wallHeight, 0.0)), // Move up by height
-              alignment: Alignment.bottomCenter, // Pivot at bottom
+                ..translateByVector3(Vector3(0.0, height, 0.0)) // Move to pivot (bottom edge)
+                ..rotateX(math.pi / 2), // Rotate 90 deg (Y -> Z)
+              alignment: Alignment.topLeft, 
               child: Container(
-               width: width,
-               height: wallHeight,
-               decoration: BoxDecoration(
-                 color: color, // Front face
-                 border: Border.all(color: Colors.black54, width: 0.5),
-                 gradient: LinearGradient(
-                   begin: Alignment.topCenter,
-                   end: Alignment.bottomCenter,
-                   colors: [color.withOpacity(0.8), color],
-                 )
-               ),
-               // Add Top Face visual hack?
-               child: Stack(
-                 clipBehavior: Clip.none,
-                 children: [
-                   // Top Cap
-                   Positioned(
-                     top: -height/2, // This is approximate
-                     left: 0,
-                     right: 0,
-                     height: height, // depth of wall
-                     child: Transform(
-                        transform: Matrix4.identity()..rotateX(math.pi / 2),
-                        alignment: Alignment.bottomCenter,
-                        child: Container(
-                          color: Color.lerp(color, Colors.white, 0.2),
-                        ),
-                     )
+                 width: width,
+                 height: wallHeight, // Draws in Z
+                 decoration: BoxDecoration(
+                   color: color,
+                   border: Border.all(color: Colors.black54, width: 0.5),
+                   gradient: LinearGradient(
+                     begin: Alignment.topCenter, // Z=0 (Base)
+                     end: Alignment.bottomCenter, // Z=wallHeight (Top)
+                     colors: [color, color.withOpacity(0.8)],
                    )
-                 ],
-               ),
+                 ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
 
   void _handleWallDrag(Offset localPos, double squareSize, List<Wall> currentWalls, Position p1, Position p2) {
