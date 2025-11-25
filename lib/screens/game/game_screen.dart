@@ -176,10 +176,10 @@ class _GameBoardState extends State<GameBoard> {
     }
 
     // Rotation Logic:
-    // If I am P1 (myIndex == 0), I start at Top (y=0). I want to be at Bottom. Rotate 180 (pi).
-    // If I am P2 (myIndex == 1), I start at Bottom (y=8). I am already at Bottom. No Rotation.
-    // If Spectator, keep default (P1 top, P2 bottom).
-    final double rotationAngle = (myIndex == 0) ? math.pi : 0;
+    // P1 (myIndex == 0) starts at y=0 (Top). To view from Bottom, Rotate 180.
+    // P2 (myIndex == 1) starts at y=8 (Bottom). Already at Bottom. No Rotation.
+    final bool shouldRotate = myIndex == 0;
+    final double rotationAngle = shouldRotate ? math.pi : 0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -194,13 +194,13 @@ class _GameBoardState extends State<GameBoard> {
             width: size,
             height: size,
             alignment: Alignment.center,
-            child: Transform.rotate(
-              angle: rotationAngle,
-              child: Transform(
-                alignment: Alignment.center,
-                transform: Matrix4.identity()
-                  ..setEntry(3, 2, _perspectiveValue)
-                  ..rotateX(_tiltAngle),
+            child: Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.identity()
+                ..setEntry(3, 2, _perspectiveValue)
+                ..rotateX(_tiltAngle),
+              child: Transform.rotate(
+                angle: rotationAngle,
                 child: SizedBox(
                   width: boardWidth,
                   height: boardHeight,
@@ -211,27 +211,7 @@ class _GameBoardState extends State<GameBoard> {
                       _buildGrid(squareSize, validMoves, isMyTurn, walls, p1Pos, p2Pos),
 
                       // 2. Render Objects (Players and Walls sorted by depth)
-                      // Note: Sorting depends on view direction.
-                      // If rotated 180, "far" is y=0 (visually top), "near" is y=8 (visually bottom).
-                      // Standard painter's algo: Draw "far" first.
-                      // Standard view (No rotation): Top (y=0) is Far. Bottom (y=8) is Near.
-                      //   So sort by Y ascending (0 drawn first, 8 drawn last).
-                      // Rotated view (180): Bottom (y=0) is Near. Top (y=8) is Far.
-                      //   Wait. If rotated 180:
-                      //   Grid (0,0) is at Bottom Right.
-                      //   Grid (0,8) is at Top Right.
-                      //   So y=8 is Top (Far). y=0 is Bottom (Near).
-                      //   We should draw y=8 first, then y=0?
-                      //   Let's re-verify Z-order.
-                      //   In 3D projection: Objects further away (smaller Z in camera space) draw first.
-                      //   With x-axis tilt (top away): Top of screen is Far. Bottom of screen is Near.
-                      //   If Rotated 180:
-                      //     y=0 is at Bottom of screen (Near).
-                      //     y=8 is at Top of screen (Far).
-                      //   So we should draw y=8 FIRST, then ... y=0 LAST.
-                      //   So we must reverse the sort order if rotated!
-                      
-                      ..._buildSortedObjects(p1Pos, p2Pos, walls, squareSize, reverseSort: myIndex == 0),
+                      ..._buildSortedObjects(p1Pos, p2Pos, walls, squareSize, isRotated: shouldRotate),
                       
                       // 3. Dragged Wall (Ghost)
                       if (_draggedWall != null)
@@ -302,7 +282,7 @@ class _GameBoardState extends State<GameBoard> {
     );
   }
 
-  List<Widget> _buildSortedObjects(Position p1Pos, Position p2Pos, List<Wall> walls, double squareSize, {required bool reverseSort}) {
+  List<Widget> _buildSortedObjects(Position p1Pos, Position p2Pos, List<Wall> walls, double squareSize, {required bool isRotated}) {
     // Create a list of renderable items with a Z-index (sort key)
     final items = <_RenderItem>[];
 
@@ -310,11 +290,11 @@ class _GameBoardState extends State<GameBoard> {
     // Player Z is simply their Y position (row index)
     items.add(_RenderItem(
       z: p1Pos.y.toDouble(),
-      widget: _buildPlayer(p1Pos, Colors.white, squareSize, widget.p1User),
+      widget: _buildPlayer(p1Pos, Colors.white, squareSize, widget.p1User, isRotated: isRotated),
     ));
     items.add(_RenderItem(
       z: p2Pos.y.toDouble(),
-      widget: _buildPlayer(p2Pos, Colors.black, squareSize, widget.p2User),
+      widget: _buildPlayer(p2Pos, Colors.black, squareSize, widget.p2User, isRotated: isRotated),
     ));
 
     // Add Walls
@@ -333,7 +313,7 @@ class _GameBoardState extends State<GameBoard> {
     }
 
     // Sort
-    if (reverseSort) {
+    if (isRotated) {
       // Descending Y (Far Y=8 to Near Y=0)
       items.sort((a, b) => b.z.compareTo(a.z));
     } else {
@@ -344,11 +324,18 @@ class _GameBoardState extends State<GameBoard> {
     return items.map((i) => i.widget).toList();
   }
 
-  Widget _buildPlayer(Position pos, Color color, double size, AppUser? user) {
+  Widget _buildPlayer(Position pos, Color color, double size, AppUser? user, {required bool isRotated}) {
     // To make it "stand up", we need to counter-rotate.
     // The board is rotated X by _tiltAngle.
     // We rotate X by -_tiltAngle.
     // We also need to position it correctly.
+    
+    // If Board is Rotated 180, we need to correct the player facing.
+    // Otherwise they will be upside down / facing away? 
+    // Board Rotation Z(180) -> Rotates Local Y to -Y.
+    // Player stands in Local Z.
+    // So Player facing is rotated 180.
+    // We need to rotate Z(180) to correct it.
     
     return Positioned(
       left: pos.x * size,
@@ -359,6 +346,7 @@ class _GameBoardState extends State<GameBoard> {
         child: Transform(
           transform: Matrix4.identity()
             ..translate(0.0, size * 0.5) // Pivot correction
+            ..rotateZ(isRotated ? math.pi : 0) // Correct Rotation
             ..rotateX(-_tiltAngle) // Counter tilt to stand up
             ..translate(0.0, -size * 0.5),
           alignment: Alignment.bottomCenter,
