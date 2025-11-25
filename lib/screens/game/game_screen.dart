@@ -326,14 +326,8 @@ class _GameBoardState extends State<GameBoard> {
   }
 
   Widget _buildPlayer(Position pos, Color color, double size, AppUser? user, {required bool isRotated}) {
-    // To make it "stand up", we need to counter-rotate.
-    // The board is rotated X by _tiltAngle.
-    // We rotate X by -_tiltAngle.
-    // We also need to position it correctly.
-    
     // Visual offset to center the player better on the tile
-    // Adjusted to -1.0 size to align feet (bottom of 1.5x box) with tile center
-    final double visualOffset = -1.0; 
+    final double visualOffset = -0.85; 
 
     return Positioned(
       left: pos.x * size,
@@ -347,10 +341,11 @@ class _GameBoardState extends State<GameBoard> {
           }
         },
         child: Transform(
-          // Simplified transform: relying on Alignment.bottomCenter to pivot around feet
           transform: Matrix4.identity()
-            ..rotateZ(isRotated ? math.pi : 0) // Correct facing direction if board is rotated
-            ..rotateX(-_tiltAngle), // Always tilt BACK (-angle) to stand up relative to tilted board
+            ..translate(0.0, size * 0.5) // Pivot correction
+            ..rotateZ(isRotated ? math.pi : 0) // Correct Rotation for facing
+            ..rotateX(_tiltAngle) // Tilt forward to counter board back-tilt
+            ..translate(0.0, -size * 0.5),
           alignment: Alignment.bottomCenter,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.end,
