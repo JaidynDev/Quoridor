@@ -30,6 +30,7 @@ class GameModel {
   // Game State
   final Map<String, dynamic> gameState; 
   final List<Map<String, dynamic>> moveLog;
+  final List<String> rematchRequests;
 
   GameModel({
     required this.id,
@@ -41,6 +42,7 @@ class GameModel {
     this.currentTurnIndex = 0,
     required this.gameState,
     this.moveLog = const [],
+    this.rematchRequests = const [],
   });
 
   Map<String, dynamic> toMap() {
@@ -53,6 +55,7 @@ class GameModel {
       'currentTurnIndex': currentTurnIndex,
       'gameState': gameState,
       'moveLog': moveLog,
+      'rematchRequests': rematchRequests,
     };
   }
 
@@ -67,6 +70,7 @@ class GameModel {
       currentTurnIndex: map['currentTurnIndex'] ?? 0,
       gameState: map['gameState'] ?? {},
       moveLog: List<Map<String, dynamic>>.from(map['moveLog'] ?? []),
+      rematchRequests: List<String>.from(map['rematchRequests'] ?? []),
     );
   }
 }

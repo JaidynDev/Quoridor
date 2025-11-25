@@ -247,17 +247,46 @@ class DatabaseService {
         .map((snap) => snap.docs.map((d) => AppUser.fromMap(d.data(), d.id)).toList());
   }
   
-  Future<void> resetGame(String gameId) async {
-    await _firestore.collection('games').doc(gameId).update({
-      'status': 'playing',
-      'winnerId': null,
-      'currentTurn': 0,
-      'p1': {'x': 4, 'y': 0},
-      'p2': {'x': 4, 'y': 8},
-      'walls': [],
-      'p1WallsLeft': 10,
-      'p2WallsLeft': 10,
-      'moveLog': [], // Clear move log
+  Future<void> requestRematch(String gameId, String userId) async {
+    final gameRef = _firestore.collection('games').doc(gameId);
+    
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(gameRef);
+      if (!snapshot.exists) return;
+      
+      final data = snapshot.data()!;
+      final playerIds = List<String>.from(data['playerIds'] ?? []);
+      final rematchRequests = List<String>.from(data['rematchRequests'] ?? []);
+      
+      if (!rematchRequests.contains(userId)) {
+        rematchRequests.add(userId);
+      }
+      
+      // Check if all players requested
+      bool allRequested = playerIds.isNotEmpty && playerIds.every((id) => rematchRequests.contains(id));
+      
+      if (allRequested) {
+        // Reset Game
+        transaction.update(gameRef, {
+          'status': 'playing',
+          'winnerId': null,
+          'currentTurnIndex': 0,
+          'gameState': {
+            'p1': {'x': 4, 'y': 0},
+            'p2': {'x': 4, 'y': 8},
+            'walls': [],
+            'p1WallsLeft': 10,
+            'p2WallsLeft': 10,
+          },
+          'rematchRequests': [],
+          'moveLog': [],
+        });
+      } else {
+        // Just update requests
+        transaction.update(gameRef, {
+          'rematchRequests': rematchRequests,
+        });
+      }
     });
   }
 

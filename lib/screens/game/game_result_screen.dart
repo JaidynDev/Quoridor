@@ -49,17 +49,28 @@ class GameResultScreen extends StatelessWidget {
               
               const SizedBox(height: 40),
               
-              ElevatedButton(
-                onPressed: () async {
-                  await db.resetGame(game.id);
-                  if (context.mounted) Navigator.of(context).pop(); // Close result screen and return to game
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              if (game.rematchRequests.contains(currentUserId))
+                ElevatedButton(
+                  onPressed: null, // Disabled
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey,
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                    disabledBackgroundColor: Colors.grey,
+                    disabledForegroundColor: Colors.white,
+                  ),
+                  child: const Text("Waiting for opponent...", style: TextStyle(color: Colors.white)),
+                )
+              else
+                ElevatedButton(
+                  onPressed: () async {
+                    await db.requestRematch(game.id, currentUserId);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  ),
+                  child: const Text("Rematch", style: TextStyle(color: Colors.white)),
                 ),
-                child: const Text("Rematch", style: TextStyle(color: Colors.white)),
-              ),
               const SizedBox(height: 20),
               OutlinedButton(
                 onPressed: () {
