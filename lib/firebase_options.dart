@@ -44,12 +44,13 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'API-KEY',
-    appId: 'APP-ID',
-    messagingSenderId: 'MESSAGING-SENDER-ID',
-    projectId: 'PROJECT-ID',
-    authDomain: 'PROJECT-ID.firebaseapp.com',
-    storageBucket: 'PROJECT-ID.appspot.com',
+    apiKey: 'AIzaSyBYNprr0JPk9LTke3bizdGRQsGMzr04oEw',
+    appId: '1:1009834187066:web:b1f2d6aba10bd5be811803',
+    messagingSenderId: '1009834187066',
+    projectId: 'quoridor-440a4',
+    authDomain: 'quoridor-440a4.firebaseapp.com',
+    storageBucket: 'quoridor-440a4.firebasestorage.app',
+    measurementId: 'G-6SZNGNBNT8',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
