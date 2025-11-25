@@ -288,29 +288,39 @@ class _GameBoardState extends State<GameBoard> {
     // Create a list of renderable items with a Z-index (sort key)
     final items = <_RenderItem>[];
 
+    // Transform positions when board is rotated 180 degrees
+    // When rotated, position (x, y) appears at (8-x, 8-y) visually
+    final p1DisplayPos = isRotated ? Position(8 - p1Pos.x, 8 - p1Pos.y) : p1Pos;
+    final p2DisplayPos = isRotated ? Position(8 - p2Pos.x, 8 - p2Pos.y) : p2Pos;
+
     // Add Players
     // Player Z is simply their Y position (row index)
     items.add(_RenderItem(
-      z: p1Pos.y.toDouble(),
-      widget: _buildPlayer(p1Pos, Colors.white, squareSize, widget.p1User, isRotated: isRotated),
+      z: p1DisplayPos.y.toDouble(),
+      widget: _buildPlayer(p1DisplayPos, Colors.white, squareSize, widget.p1User, isRotated: isRotated),
     ));
     items.add(_RenderItem(
-      z: p2Pos.y.toDouble(),
-      widget: _buildPlayer(p2Pos, Colors.black, squareSize, widget.p2User, isRotated: isRotated),
+      z: p2DisplayPos.y.toDouble(),
+      widget: _buildPlayer(p2DisplayPos, Colors.black, squareSize, widget.p2User, isRotated: isRotated),
     ));
 
     // Add Walls
     for (final wall in walls) {
+      // Transform wall position when board is rotated
+      final wallDisplayPos = isRotated 
+        ? Wall(8 - wall.x, 8 - wall.y, wall.orientation)
+        : wall;
+      
       double z;
-      if (wall.orientation == 0) {
-        z = wall.y + 0.8; 
+      if (wallDisplayPos.orientation == 0) {
+        z = wallDisplayPos.y + 0.8; 
       } else {
-        z = wall.y + 1.8; // Vertical wall ends at grid line y+2.
+        z = wallDisplayPos.y + 1.8; // Vertical wall ends at grid line y+2.
       }
       
       items.add(_RenderItem(
         z: z,
-        widget: _buildWall(wall, squareSize, Colors.brown[800]!),
+        widget: _buildWall(wallDisplayPos, squareSize, Colors.brown[800]!),
       ));
     }
 
@@ -328,7 +338,8 @@ class _GameBoardState extends State<GameBoard> {
 
   Widget _buildPlayer(Position pos, Color color, double size, AppUser? user, {required bool isRotated}) {
     // Visual offset to center the player better on the tile
-    final double visualOffset = -0.85; 
+    // When rotated, the offset direction is inverted
+    final double visualOffset = isRotated ? 0.85 : -0.85; 
 
     return Positioned(
       left: pos.x * size,
