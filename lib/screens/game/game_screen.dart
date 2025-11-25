@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:math' as math;
+import 'package:vector_math/vector_math_64.dart' show Vector3;
 import '../../models/game_model.dart';
 import '../../models/quoridor_logic.dart';
 import '../../models/user_model.dart';
@@ -342,10 +343,10 @@ class _GameBoardState extends State<GameBoard> {
         },
         child: Transform(
           transform: Matrix4.identity()
-            ..translateByDouble(0.0, size * 0.5, 0.0, 0.0) // Pivot correction
+            ..translateByVector3(Vector3(0.0, size * 0.5, 0.0)) // Pivot correction
             ..rotateZ(isRotated ? math.pi : 0) // Correct Rotation for facing
             ..rotateX(_tiltAngle) // Tilt forward to counter board back-tilt
-            ..translateByDouble(0.0, -size * 0.5, 0.0, 0.0),
+            ..translateByVector3(Vector3(0.0, -size * 0.5, 0.0)),
           alignment: Alignment.bottomCenter,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -440,9 +441,9 @@ class _GameBoardState extends State<GameBoard> {
           // The Wall Body (Standing up)
           Transform(
             transform: Matrix4.identity()
-              ..translateByDouble(0.0, height, 0.0, 0.0) // Move to bottom of footprint
+              ..translateByVector3(Vector3(0.0, height, 0.0)) // Move to bottom of footprint
               ..rotateX(-math.pi / 2) // Rotate 90 deg to stand up
-              ..translateByDouble(0.0, -wallHeight, 0.0, 0.0), // Move up by height
+              ..translateByVector3(Vector3(0.0, -wallHeight, 0.0)), // Move up by height
             alignment: Alignment.bottomCenter, // Pivot at bottom
             child: Container(
                width: width,
