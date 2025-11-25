@@ -390,7 +390,7 @@ class _GameBoardState extends State<GameBoard> {
   Widget _buildWall(Wall wall, double gridSize, Color color, {bool isGhost = false, bool isFlipped = false}) {
     double top, left, width, height;
     final thickness = gridSize * 0.2;  
-    final length = gridSize * 2 + gridSize * 0.1;
+    final length = gridSize * 2.0; // Exactly 2 squares
 
     // For 3D effect, we draw a container that looks like a block
     // We can use a stack of faces or just a styled container
@@ -423,16 +423,24 @@ class _GameBoardState extends State<GameBoard> {
       );
     }
 
-    // 3D Wall
-    // We want it to have height (Z-axis). 
+    // 3D Wall Construction
+    final wallHeight = gridSize * 0.6; 
     
-    final wallHeight = gridSize * 0.6; // How tall the wall stands up
+    // Colors
+    final mainColor = Color(0xFF3E2723); // Dark Brown (Brown 900)
+    final capColor = Color(0xFF8D6E63); // Lighter Brown (Brown 400)
+    final topColor = Color(0xFF4E342E); // Slightly lighter Dark Brown (Brown 800)
+
+    // Identify Long vs Short faces
+    final isHorizontal = width > height;
+    final frontBackColor = isHorizontal ? mainColor : capColor;
+    final sideColor = isHorizontal ? capColor : mainColor;
 
     return Positioned(
       left: left,
       top: top,
       width: width,
-      height: height, // Base footprint
+      height: height,
       child: Transform.scale(
         scaleX: isFlipped ? -1.0 : 1.0,
         scaleY: isFlipped ? -1.0 : 1.0,
@@ -440,50 +448,93 @@ class _GameBoardState extends State<GameBoard> {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            // 1. Shadow/Base
+            // 1. Shadow
             Container(
               width: width,
               height: height,
               color: Colors.black26,
             ),
+
+            // 2. Faces sorted by depth relative to viewer
             
-            // 2. Top Cap (Raised to wallHeight)
+            // For Side Faces (Left/Right), simple order is usually fine as they are thin/don't overlap much from front view
+            // Left Face (X=0)
+            Transform(
+              transform: Matrix4.identity()..rotateY(-math.pi / 2),
+              alignment: Alignment.centerLeft,
+              child: Container(
+                 width: wallHeight, height: height, 
+                 decoration: BoxDecoration(color: sideColor),
+              ),
+            ),
+            // Right Face (X=width)
+            Transform(
+              transform: Matrix4.identity()..translateByVector3(Vector3(width, 0.0, 0.0))..rotateY(-math.pi / 2),
+              alignment: Alignment.centerLeft,
+              child: Container(
+                 width: wallHeight, height: height, 
+                 decoration: BoxDecoration(color: sideColor),
+              ),
+            ),
+
+            // For Front/Back, order depends on isFlipped (Host vs Guest view)
+            // Guest (!Flipped): Sees Front. Draw Back then Front.
+            // Host (Flipped): Sees Back. Draw Front then Back.
+            
+            if (isFlipped) ...[
+               // Draw Front first (Further away from Host)
+               _buildFrontFace(width, height, wallHeight, frontBackColor),
+               // Draw Back second (Closer to Host)
+               _buildBackFace(width, height, wallHeight, frontBackColor),
+            ] else ...[
+               // Draw Back first (Further away from Guest)
+               _buildBackFace(width, height, wallHeight, frontBackColor),
+               // Draw Front second (Closer to Guest)
+               _buildFrontFace(width, height, wallHeight, frontBackColor),
+            ],
+
+            // 3. Top Cap (Always on top)
             Transform(
               transform: Matrix4.identity()..translateByVector3(Vector3(0.0, 0.0, wallHeight)),
               child: Container(
                  width: width,
                  height: height,
                  decoration: BoxDecoration(
-                   color: Color.lerp(color, Colors.white, 0.3),
-                   borderRadius: BorderRadius.circular(2),
-                 ),
-              ),
-            ),
-
-            // 3. Face (Vertical)
-            // Rendered as if for Guest (P2, Bottom). Flipped view will auto-correct for Host.
-            // Pivot at Bottom Edge (height), Rotate 90 deg to stand up (Y->Z)
-            Transform(
-              transform: Matrix4.identity()
-                ..translateByVector3(Vector3(0.0, height, 0.0)) // Move to pivot (bottom edge)
-                ..rotateX(math.pi / 2), // Rotate 90 deg (Y -> Z)
-              alignment: Alignment.topLeft, 
-              child: Container(
-                 width: width,
-                 height: wallHeight, // Draws in Z
-                 decoration: BoxDecoration(
-                   color: color,
-                   border: Border.all(color: Colors.black54, width: 0.5),
-                   gradient: LinearGradient(
-                     begin: Alignment.topCenter, // Z=0 (Base)
-                     end: Alignment.bottomCenter, // Z=wallHeight (Top)
-                     colors: [color, color.withOpacity(0.8)],
-                   )
+                   color: topColor,
+                   borderRadius: BorderRadius.circular(1),
+                   border: Border.all(color: Colors.black12, width: 0.5),
                  ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFrontFace(double width, double height, double wallHeight, Color color) {
+    return Transform(
+      transform: Matrix4.identity()
+        ..translateByVector3(Vector3(0.0, height, 0.0)) 
+        ..rotateX(math.pi / 2), 
+      alignment: Alignment.bottomCenter, 
+      child: Container(
+         width: width, height: wallHeight, 
+         decoration: BoxDecoration(
+           color: color,
+           border: Border.all(color: Colors.black26, width: 0.5),
+         ),
+      ),
+    );
+  }
+
+  Widget _buildBackFace(double width, double height, double wallHeight, Color color) {
+    return Transform(
+      transform: Matrix4.identity()..rotateX(math.pi / 2),
+      alignment: Alignment.topCenter, 
+      child: Container(
+         width: width, height: wallHeight, 
+         decoration: BoxDecoration(color: color),
       ),
     );
   }
