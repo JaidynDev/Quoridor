@@ -199,7 +199,7 @@ class _GameBoardState extends State<GameBoard> {
               alignment: Alignment.center,
               transform: Matrix4.identity()
                 ..setEntry(3, 2, _perspectiveValue)
-                ..rotateX(_tiltAngle),
+                ..rotateX(-_tiltAngle),
               child: Transform.rotate(
                 angle: rotationAngle,
                 child: SizedBox(
@@ -353,7 +353,7 @@ class _GameBoardState extends State<GameBoard> {
           transform: Matrix4.identity()
             ..translate(0.0, size * 0.5) // Pivot correction
             ..rotateZ(isRotated ? math.pi : 0) // Correct Rotation
-            ..rotateX(-_tiltAngle) // Counter tilt to stand up
+            ..rotateX(_tiltAngle) // Counter tilt to stand up
             ..translate(0.0, -size * 0.5),
           alignment: Alignment.bottomCenter,
           child: Column(
