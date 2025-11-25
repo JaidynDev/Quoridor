@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'dart:math' as math;
 import '../../models/game_model.dart';
 import '../../models/quoridor_logic.dart';
 import '../../models/user_model.dart';
 import '../../services/database_service.dart';
+import 'game_result_screen.dart';
 
 class GameScreen extends StatelessWidget {
   final String gameId;
@@ -15,7 +17,7 @@ class GameScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final db = context.read<DatabaseService>();
-    final user = context.watch<AppUser?>();
+    final currentUser = context.watch<AppUser?>();
 
     return StreamBuilder<GameModel?>(
       stream: db.streamGame(gameId),
@@ -25,48 +27,102 @@ class GameScreen extends StatelessWidget {
 
         final game = snapshot.data!;
         
-        return Scaffold(
-          appBar: AppBar(
-            title: Text('Game: ${gameId.substring(0, 4)}...'),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.share),
-                onPressed: () {
-                  Share.share('Join my Quoridor game! Code: $gameId');
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.copy),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: gameId));
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code copied!')));
-                },
-              ),
-            ],
-          ),
-          body: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    Text("Status: ${game.status}"),
-                    Text("P1 Walls: ${game.gameState['p1WallsLeft'] ?? 10}"),
-                    Text("P2 Walls: ${game.gameState['p2WallsLeft'] ?? 10}"),
-                  ],
-                ),
-              ),
-              if (game.status == 'waiting')
-                const Expanded(child: Center(child: Text("Waiting for opponent... Share the code!"))),
-              if (game.status == 'playing' || game.status == 'finished')
-                Expanded(
-                  child: GameBoard(game: game, userId: user?.id ?? ''),
-                ),
-            ],
-          ),
-        );
+        return _GameScreenContent(game: game, currentUser: currentUser);
       },
+    );
+  }
+}
+
+class _GameScreenContent extends StatelessWidget {
+  final GameModel game;
+  final AppUser? currentUser;
+
+  const _GameScreenContent({required this.game, required this.currentUser});
+
+  @override
+  Widget build(BuildContext context) {
+    final db = context.read<DatabaseService>();
+    
+    // Find opponent ID
+    final p1Id = game.playerIds.isNotEmpty ? game.playerIds[0] : '';
+    final p2Id = game.playerIds.length > 1 ? game.playerIds[1] : '';
+    
+    // We want to resolve both users. 
+    // We can wrap GameBoard in StreamBuilders.
+    
+    return StreamBuilder<AppUser?>(
+      stream: p1Id.isNotEmpty ? db.streamUser(p1Id) : Stream.value(null),
+      builder: (context, p1Snap) {
+        return StreamBuilder<AppUser?>(
+          stream: p2Id.isNotEmpty ? db.streamUser(p2Id) : Stream.value(null),
+          builder: (context, p2Snap) {
+             final p1User = p1Snap.data;
+             final p2User = p2Snap.data;
+             
+             return Scaffold(
+              appBar: AppBar(
+                title: Text('Game: ${game.id.substring(0, 4)}...'),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.share),
+                    onPressed: () {
+                      Share.share('Join my Quoridor game! Code: ${game.id}');
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.copy),
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: game.id));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code copied!')));
+                    },
+                  ),
+                ],
+              ),
+              body: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildPlayerInfo(p1User, game.gameState['p1WallsLeft'] ?? 10, 1),
+                        const Text("vs"),
+                        _buildPlayerInfo(p2User, game.gameState['p2WallsLeft'] ?? 10, 2),
+                      ],
+                    ),
+                  ),
+                  if (game.status == 'waiting')
+                    const Expanded(child: Center(child: Text("Waiting for opponent... Share the code!"))),
+                  if (game.status == 'playing' || game.status == 'finished')
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          GameBoard(
+                            game: game, 
+                            userId: currentUser?.id ?? '',
+                            p1User: p1User,
+                            p2User: p2User,
+                          ),
+                          if (game.status == 'finished')
+                            GameResultScreen(game: game, currentUserId: currentUser?.id ?? ''),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }
+        );
+      }
+    );
+  }
+
+  Widget _buildPlayerInfo(AppUser? user, int walls, int pNum) {
+    return Column(
+      children: [
+        Text(user?.username ?? "Player $pNum", style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text("Walls: $walls"),
+      ],
     );
   }
 }
@@ -74,8 +130,16 @@ class GameScreen extends StatelessWidget {
 class GameBoard extends StatefulWidget {
   final GameModel game;
   final String userId;
+  final AppUser? p1User;
+  final AppUser? p2User;
 
-  const GameBoard({super.key, required this.game, required this.userId});
+  const GameBoard({
+    super.key, 
+    required this.game, 
+    required this.userId,
+    this.p1User,
+    this.p2User,
+  });
 
   @override
   State<GameBoard> createState() => _GameBoardState();
@@ -85,7 +149,9 @@ class _GameBoardState extends State<GameBoard> {
   Wall? _draggedWall;
   bool _isValidPlacement = false;
   
-  // Cache for path checking optimization if needed, though BFS is fast enough for 9x9
+  // Perspective Constants
+  final double _perspectiveValue = 0.001;
+  final double _tiltAngle = 0.6; // Radians ~ 34 degrees
   
   @override
   Widget build(BuildContext context) {
@@ -112,75 +178,54 @@ class _GameBoardState extends State<GameBoard> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.biggest.shortestSide;
-        final squareSize = size / 9;
+        // Adjust square size to fit in the tilted view (needs some padding)
+        final squareSize = size / 11; // Slightly smaller to fit with tilt
+        final boardWidth = squareSize * 9;
+        final boardHeight = squareSize * 9;
 
         return Center(
-          child: SizedBox(
+          child: Container(
             width: size,
             height: size,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // Grid
-                for (int y = 0; y < 9; y++)
-                  for (int x = 0; x < 9; x++)
-                    Positioned(
-                      left: x * squareSize,
-                      top: y * squareSize,
-                      width: squareSize,
-                      height: squareSize,
-                      child: GestureDetector(
-                        onTap: () {
-                          if (!isMyTurn) return;
-                          // If we were dragging a wall, don't move
-                          if (_draggedWall != null) {
-                            setState(() => _draggedWall = null);
-                            return;
-                          }
-                          
-                          final target = Position(x, y);
-                          if (validMoves.contains(target)) {
-                            _makeMove(target, walls);
-                          }
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                            color: validMoves.contains(Position(x, y)) 
-                              ? Colors.green.withOpacity(0.3) 
-                              : Colors.brown[200],
-                            borderRadius: BorderRadius.circular(4),
-                          ),
+            alignment: Alignment.center,
+            child: Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.identity()
+                ..setEntry(3, 2, _perspectiveValue)
+                ..rotateX(_tiltAngle),
+              child: SizedBox(
+                width: boardWidth,
+                height: boardHeight,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    // 1. Floor Grid (Base)
+                    _buildGrid(squareSize, validMoves, isMyTurn, walls, p1Pos, p2Pos),
+
+                    // 2. Render Objects (Players and Walls sorted by depth)
+                    ..._buildSortedObjects(p1Pos, p2Pos, walls, squareSize),
+                    
+                    // 3. Dragged Wall (Ghost)
+                    if (_draggedWall != null)
+                       _buildWall(_draggedWall!, squareSize, 
+                         _isValidPlacement ? Colors.green.withOpacity(0.7) : Colors.red.withOpacity(0.7),
+                         isGhost: true
+                       ),
+
+                    // 4. Touch Handling Layer (Invisible, on top of everything for drag)
+                    if (isMyTurn && myWallsLeft > 0)
+                      Positioned.fill(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onPanStart: (details) => _handleWallDrag(details.localPosition, squareSize, walls, p1Pos, p2Pos),
+                          onPanUpdate: (details) => _handleWallDrag(details.localPosition, squareSize, walls, p1Pos, p2Pos),
+                          onPanEnd: (details) => _finalizeWallPlacement(walls),
+                          onPanCancel: () => setState(() => _draggedWall = null),
                         ),
                       ),
-                    ),
-
-                // Players
-                _buildPlayer(p1Pos, Colors.white, squareSize),
-                _buildPlayer(p2Pos, Colors.black, squareSize),
-
-                // Existing Walls
-                for (final wall in walls)
-                   _buildWall(wall, squareSize, Colors.brown[800]!),
-                   
-                // Dragged Wall (Ghost)
-                if (_draggedWall != null)
-                   _buildWall(_draggedWall!, squareSize, 
-                     _isValidPlacement ? Colors.green.withOpacity(0.7) : Colors.red.withOpacity(0.7)
-                   ),
-
-                // Wall Placement Interaction (Full board drag)
-                if (isMyTurn && myWallsLeft > 0)
-                  Positioned.fill(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onPanStart: (details) => _handleWallDrag(details.localPosition, squareSize, walls, p1Pos, p2Pos),
-                      onPanUpdate: (details) => _handleWallDrag(details.localPosition, squareSize, walls, p1Pos, p2Pos),
-                      onPanEnd: (details) => _finalizeWallPlacement(walls),
-                      onPanCancel: () => setState(() => _draggedWall = null),
-                    ),
-                  ),
-              ],
+                  ],
+                ),
+              ),
             ),
           ),
         );
@@ -188,36 +233,146 @@ class _GameBoardState extends State<GameBoard> {
     );
   }
 
-  Widget _buildPlayer(Position pos, Color color, double size) {
+  Widget _buildGrid(double squareSize, List<Position> validMoves, bool isMyTurn, List<Wall> walls, Position p1, Position p2) {
+    return Stack(
+      children: [
+         for (int y = 0; y < 9; y++)
+           for (int x = 0; x < 9; x++)
+             Positioned(
+               left: x * squareSize,
+               top: y * squareSize,
+               width: squareSize,
+               height: squareSize,
+               child: GestureDetector(
+                 onTap: () {
+                    if (!isMyTurn) return;
+                    if (_draggedWall != null) {
+                      setState(() => _draggedWall = null);
+                      return;
+                    }
+                    final target = Position(x, y);
+                    if (validMoves.contains(target)) {
+                      _makeMove(target, walls);
+                    }
+                 },
+                 child: Container(
+                   margin: const EdgeInsets.all(1),
+                   decoration: BoxDecoration(
+                     color: validMoves.contains(Position(x, y)) 
+                       ? Colors.green.withOpacity(0.3) 
+                       : Colors.brown[200], // Floor color
+                     borderRadius: BorderRadius.circular(2),
+                     boxShadow: [
+                        BoxShadow(color: Colors.black12, offset: Offset(1, 1))
+                     ]
+                   ),
+                 ),
+               ),
+             ),
+      ],
+    );
+  }
+
+  List<Widget> _buildSortedObjects(Position p1Pos, Position p2Pos, List<Wall> walls, double squareSize) {
+    // Create a list of renderable items with a Z-index (sort key)
+    final items = <_RenderItem>[];
+
+    // Add Players
+    // Player Z is simply their Y position (row index)
+    items.add(_RenderItem(
+      z: p1Pos.y.toDouble(),
+      widget: _buildPlayer(p1Pos, Colors.white, squareSize, widget.p1User),
+    ));
+    items.add(_RenderItem(
+      z: p2Pos.y.toDouble(),
+      widget: _buildPlayer(p2Pos, Colors.black, squareSize, widget.p2User),
+    ));
+
+    // Add Walls
+    for (final wall in walls) {
+      double z;
+      if (wall.orientation == 0) {
+        z = wall.y + 0.8; 
+      } else {
+        z = wall.y + 1.8; // Vertical wall ends at grid line y+2.
+      }
+      
+      items.add(_RenderItem(
+        z: z,
+        widget: _buildWall(wall, squareSize, Colors.brown[800]!),
+      ));
+    }
+
+    // Sort
+    items.sort((a, b) => a.z.compareTo(b.z));
+
+    return items.map((i) => i.widget).toList();
+  }
+
+  Widget _buildPlayer(Position pos, Color color, double size, AppUser? user) {
+    // To make it "stand up", we need to counter-rotate.
+    // The board is rotated X by _tiltAngle.
+    // We rotate X by -_tiltAngle.
+    // We also need to position it correctly.
+    
     return Positioned(
       left: pos.x * size,
-      top: pos.y * size,
+      top: pos.y * size - (size * 0.5), // Shift up slightly to stand on tile
       width: size,
-      height: size,
+      height: size * 1.5, // Taller container for standing character
       child: IgnorePointer(
-        child: Center(
-          child: Container(
-            width: size * 0.6,
-            height: size * 0.6,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.grey, width: 2),
-              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(2,2))],
-            ),
+        child: Transform(
+          transform: Matrix4.identity()
+            ..translate(0.0, size * 0.5) // Pivot correction
+            ..rotateX(-_tiltAngle) // Counter tilt to stand up
+            ..translate(0.0, -size * 0.5),
+          alignment: Alignment.bottomCenter,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              // Character Avatar
+              Container(
+                width: size * 0.8,
+                height: size * 0.8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 2))],
+                  image: user?.photoUrl != null && user!.photoUrl!.isNotEmpty
+                    ? DecorationImage(image: NetworkImage(user.photoUrl!), fit: BoxFit.cover)
+                    : null,
+                  color: user?.photoUrl == null ? color : Colors.grey[300],
+                ),
+                child: user?.photoUrl == null 
+                  ? Icon(Icons.person, color: color == Colors.white ? Colors.black : Colors.white) 
+                  : null,
+              ),
+              // Small shadow/base
+              Container(
+                 width: size * 0.6,
+                 height: size * 0.2,
+                 decoration: BoxDecoration(
+                   color: Colors.black26,
+                   borderRadius: BorderRadius.all(Radius.elliptical(size * 0.6, size * 0.2)),
+                 ),
+              )
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildWall(Wall wall, double gridSize, Color color) {
+  Widget _buildWall(Wall wall, double gridSize, Color color, {bool isGhost = false}) {
     double top, left, width, height;
-    final thickness = gridSize * 0.15; // Thicker walls for visibility
-    final length = gridSize * 2 + gridSize * 0.05; // Slightly longer to bridge gap visually
+    final thickness = gridSize * 0.2;  
+    final length = gridSize * 2 + gridSize * 0.1;
 
+    // For 3D effect, we draw a container that looks like a block
+    // We can use a stack of faces or just a styled container
+    
     if (wall.orientation == 0) { // Horizontal
-      left = wall.x * gridSize; // Aligned with cell start
+      left = wall.x * gridSize; 
       top = (wall.y + 1) * gridSize - (thickness / 2);
       width = length;
       height = thickness;
@@ -228,20 +383,87 @@ class _GameBoardState extends State<GameBoard> {
       height = length;
     }
 
+    // If ghost, just flat
+    if (isGhost) {
+      return Positioned(
+        left: left,
+        top: top,
+        width: width,
+        height: height,
+        child: Container(
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+      );
+    }
+
+    // 3D Wall
+    // We want it to have height (Z-axis). 
+    
+    final wallHeight = gridSize * 0.6; // How tall the wall stands up
+
     return Positioned(
       left: left,
       top: top,
       width: width,
-      height: height,
-      child: Container(
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(thickness/2),
-          boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 2)],
-        ),
+      height: height, // Base footprint
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Shadow/Base
+          Container(
+            width: width,
+            height: height,
+            color: Colors.black26,
+          ),
+          // The Wall Body (Standing up)
+          Transform(
+            transform: Matrix4.identity()
+              ..translate(0.0, height) // Move to bottom of footprint
+              ..rotateX(-math.pi / 2) // Rotate 90 deg to stand up
+              ..translate(0.0, -wallHeight), // Move up by height
+            alignment: Alignment.bottomCenter, // Pivot at bottom
+            child: Container(
+               width: width,
+               height: wallHeight,
+               decoration: BoxDecoration(
+                 color: color, // Front face
+                 border: Border.all(color: Colors.black54, width: 0.5),
+                 gradient: LinearGradient(
+                   begin: Alignment.topCenter,
+                   end: Alignment.bottomCenter,
+                   colors: [color.withOpacity(0.8), color],
+                 )
+               ),
+               // Add Top Face visual hack?
+               child: Stack(
+                 clipBehavior: Clip.none,
+                 children: [
+                   // Top Cap
+                   Positioned(
+                     top: -height/2, // This is approximate
+                     left: 0,
+                     right: 0,
+                     height: height, // depth of wall
+                     child: Transform(
+                        transform: Matrix4.identity()..rotateX(math.pi / 2),
+                        alignment: Alignment.bottomCenter,
+                        child: Container(
+                          color: Color.lerp(color, Colors.white, 0.2),
+                        ),
+                     )
+                   )
+                 ],
+               ),
+            ),
+          ),
+        ],
       ),
     );
   }
+
 
   void _handleWallDrag(Offset localPos, double squareSize, List<Wall> currentWalls, Position p1, Position p2) {
     // Convert localPos to grid coordinates
@@ -253,8 +475,6 @@ class _GameBoardState extends State<GameBoard> {
     double rawY = touchPos.dy / squareSize;
 
     // Identify nearest gap
-    // Gap x is between col x and x+1 (vertical wall)
-    // Gap y is between row y and y+1 (horizontal wall)
     
     // Logic: Find nearest integer.
     int nearestX = rawX.round();
@@ -267,30 +487,13 @@ class _GameBoardState extends State<GameBoard> {
     int orientation = (distToX < distToY) ? 1 : 0; // 1=Vertical (closer to X line), 0=Horizontal (closer to Y line)
     
     // Map to valid wall indices (0..7)
-    // Vertical wall at x=0 is between col 0 and 1. NearestX should be 1.
-    // So wallX = nearestX - 1.
-    
     int wallX = nearestX - 1;
     int wallY = nearestY - 1;
     
     if (orientation == 0) {
-      // Horizontal: snapped to Y line. 
-      // wallY is index of row *above* the wall? No, gap index.
-      // Wall(x, y, 0) is between row y and y+1.
-      // NearestY corresponds to the line index. Line 1 is between row 0 and 1.
-      // So wallY = nearestY - 1 is correct.
-      // But horizontal wall needs to be aligned with a column start?
-      // Yes, wall.x determines start column.
-      // We should round rawX to nearest integer? No, floor rawX?
-      // Horizontal wall spans 2 cells.
-      // Center of wall is at rawX. Start is rawX - 1?
-      // Let's snap x to nearest cell index.
       wallX = rawX.floor();
       wallY = nearestY - 1;
     } else {
-      // Vertical: snapped to X line.
-      // wallX = nearestX - 1.
-      // wallY needs to be snapped to nearest cell index (start row).
       wallX = nearestX - 1;
       wallY = rawY.floor();
     }
@@ -359,4 +562,11 @@ class _GameBoardState extends State<GameBoard> {
     final nextTurn = (widget.game.currentTurnIndex + 1) % 2;
     await db.updateGameState(widget.game.id, newState, nextTurn);
   }
+}
+
+class _RenderItem {
+  final double z;
+  final Widget widget;
+  
+  _RenderItem({required this.z, required this.widget});
 }
