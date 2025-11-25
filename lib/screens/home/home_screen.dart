@@ -56,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Text('Quoridor'),
             const SizedBox(width: 8),
             Text(
-              'v1.0.1',
+              'v1.0.2',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -133,11 +133,10 @@ class _HomeScreenState extends State<HomeScreen> {
               label: const Text("Play Game"),
             ),
             const SizedBox(height: 16),
-            // Search Users Button (Temporary until better UI)
             OutlinedButton.icon(
-              onPressed: () => _showUserSearch(context, user?.id ?? ''),
-              icon: const Icon(Icons.person_search),
-              label: const Text("Find Friends"),
+              onPressed: () => context.push('/friends'),
+              icon: const Icon(Icons.people),
+              label: const Text("Friends"),
             ),
             const SizedBox(height: 16),
             OutlinedButton(
@@ -154,89 +153,5 @@ class _HomeScreenState extends State<HomeScreen> {
     if (lastActive == null) return false;
     return DateTime.now().difference(lastActive).inMinutes < 5;
   }
-
-  void _showUserSearch(BuildContext context, String currentUserId) {
-    showDialog(
-      context: context,
-      builder: (context) => _UserSearchDialog(currentUserId: currentUserId),
-    );
-  }
 }
 
-class _UserSearchDialog extends StatefulWidget {
-  final String currentUserId;
-  const _UserSearchDialog({required this.currentUserId});
-
-  @override
-  State<_UserSearchDialog> createState() => _UserSearchDialogState();
-}
-
-class _UserSearchDialogState extends State<_UserSearchDialog> {
-  final _searchController = TextEditingController();
-  List<AppUser> _results = [];
-  bool _loading = false;
-
-  Future<void> _search() async {
-    if (_searchController.text.isEmpty) return;
-    setState(() => _loading = true);
-    final db = context.read<DatabaseService>();
-    final results = await db.searchUsers(_searchController.text);
-    setState(() {
-      _results = results;
-      _loading = false;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text("Find Friends", style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: const InputDecoration(
-                      hintText: "Search username...",
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (_) => _search(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(onPressed: _search, icon: const Icon(Icons.search)),
-              ],
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 300,
-              width: double.maxFinite,
-              child: _loading 
-                ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
-                    itemCount: _results.length,
-                    itemBuilder: (context, index) {
-                      final user = _results[index];
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundImage: user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
-                          child: user.photoUrl == null ? Text(user.username[0].toUpperCase()) : null,
-                        ),
-                        title: Text(user.username),
-                        onTap: () => UserProfileDialog.show(context, user.id, widget.currentUserId),
-                      );
-                    },
-                  ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

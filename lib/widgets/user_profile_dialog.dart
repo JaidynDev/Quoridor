@@ -114,12 +114,47 @@ class UserProfileDialog extends StatelessWidget {
                         stream: db.streamUser(currentUserId),
                         builder: (context, mySnap) {
                           final me = mySnap.data;
-                          final isFriend = me?.friends.contains(userId) ?? false;
+                          if (me == null) return const SizedBox();
+
+                          final isFriend = me.friends.contains(userId);
                           
+                          if (isFriend) {
+                            return FilledButton.tonalIcon(
+                              onPressed: () async {
+                                // Confirm remove
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text("Remove Friend?"),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+                                      TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("Remove")),
+                                    ],
+                                  ),
+                                );
+                                if (confirm == true) {
+                                  await db.removeFriend(currentUserId, userId);
+                                }
+                              },
+                              icon: const Icon(Icons.person_remove),
+                              label: const Text("Remove Friend"),
+                              style: FilledButton.styleFrom(backgroundColor: Colors.red.shade100, foregroundColor: Colors.red),
+                            );
+                          }
+
+                          // Check if request sent? 
+                          // For now, just show Add Friend, and when clicked, show feedback.
                           return FilledButton.tonalIcon(
-                            onPressed: () => db.toggleFriend(currentUserId, userId),
-                            icon: Icon(isFriend ? Icons.person_remove : Icons.person_add),
-                            label: Text(isFriend ? "Remove Friend" : "Add Friend"),
+                            onPressed: () async {
+                              await db.sendFriendRequest(currentUserId, userId);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text("Friend Request Sent!"))
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.person_add),
+                            label: const Text("Add Friend"),
                           );
                         }
                       ),

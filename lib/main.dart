@@ -9,6 +9,7 @@ import 'services/database_service.dart';
 import 'screens/auth/auth_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/lobby/lobby_screen.dart';
+import 'screens/friends/friends_screen.dart';
 import 'screens/game/game_screen.dart';
 
 void main() async {
@@ -78,6 +79,10 @@ class AppRouter extends StatelessWidget {
         GoRoute(
           path: '/lobby',
           builder: (context, state) => const LobbyScreen(),
+        ),
+        GoRoute(
+          path: '/friends',
+          builder: (context, state) => const FriendsScreen(),
         ),
         GoRoute(
           path: '/game/:id',

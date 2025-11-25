@@ -7,6 +7,7 @@ import '../../models/game_model.dart';
 import '../../models/quoridor_logic.dart';
 import '../../models/user_model.dart';
 import '../../services/database_service.dart';
+import '../../widgets/user_profile_dialog.dart';
 import 'game_result_screen.dart';
 
 class GameScreen extends StatelessWidget {
@@ -342,7 +343,12 @@ class _GameBoardState extends State<GameBoard> {
       top: pos.y * size - (size * 0.5), // Shift up slightly to stand on tile
       width: size,
       height: size * 1.5, // Taller container for standing character
-      child: IgnorePointer(
+      child: GestureDetector(
+        onTap: () {
+          if (user != null) {
+            UserProfileDialog.show(context, user.id, widget.userId);
+          }
+        },
         child: Transform(
           transform: Matrix4.identity()
             ..translate(0.0, size * 0.5) // Pivot correction

@@ -136,26 +136,79 @@ class DatabaseService {
     });
   }
 
-  Future<void> toggleFriend(String myId, String friendId) async {
-    final myRef = _firestore.collection('users').doc(myId);
+  Future<void> sendFriendRequest(String currentUserId, String targetUserId) async {
+    if (currentUserId == targetUserId) return;
+    
+    // Check if already friends or requested
+    final targetUserRef = _firestore.collection('users').doc(targetUserId);
     
     await _firestore.runTransaction((transaction) async {
-      final snapshot = await transaction.get(myRef);
-      if (!snapshot.exists) return;
+       final targetSnap = await transaction.get(targetUserRef);
+       if (!targetSnap.exists) throw Exception("User not found");
+       
+       final targetData = targetSnap.data()!;
+       final friends = List<String>.from(targetData['friends'] ?? []);
+       if (friends.contains(currentUserId)) return; // Already friends
 
-      final data = snapshot.data()!;
-      final friends = List<String>.from(data['friends'] ?? []);
-      
-      if (friends.contains(friendId)) {
-        friends.remove(friendId);
-      } else {
-        friends.add(friendId);
-      }
-      
-      transaction.update(myRef, {'friends': friends});
+       // Create request
+       final requestRef = _firestore.collection('users').doc(targetUserId).collection('friend_requests').doc(currentUserId);
+       transaction.set(requestRef, {
+         'fromId': currentUserId,
+         'timestamp': FieldValue.serverTimestamp(),
+       });
     });
   }
 
+  Future<void> acceptFriendRequest(String currentUserId, String fromUserId) async {
+    final myRef = _firestore.collection('users').doc(currentUserId);
+    final fromRef = _firestore.collection('users').doc(fromUserId);
+    final requestRef = myRef.collection('friend_requests').doc(fromUserId);
+
+    await _firestore.runTransaction((transaction) async {
+      // Get current data
+      final mySnap = await transaction.get(myRef);
+      final fromSnap = await transaction.get(fromRef);
+      
+      if (!mySnap.exists || !fromSnap.exists) return;
+
+      // Add to friends list for BOTH
+      transaction.update(myRef, {
+        'friends': FieldValue.arrayUnion([fromUserId])
+      });
+      transaction.update(fromRef, {
+        'friends': FieldValue.arrayUnion([currentUserId])
+      });
+      
+      // Delete request
+      transaction.delete(requestRef);
+    });
+  }
+
+  Future<void> declineFriendRequest(String currentUserId, String fromUserId) async {
+    await _firestore.collection('users').doc(currentUserId).collection('friend_requests').doc(fromUserId).delete();
+  }
+
+  Future<void> removeFriend(String currentUserId, String friendId) async {
+    final myRef = _firestore.collection('users').doc(currentUserId);
+    final friendRef = _firestore.collection('users').doc(friendId);
+
+    await _firestore.runTransaction((transaction) async {
+      transaction.update(myRef, {
+        'friends': FieldValue.arrayRemove([friendId])
+      });
+      transaction.update(friendRef, {
+        'friends': FieldValue.arrayRemove([currentUserId])
+      });
+    });
+  }
+
+  Stream<List<String>> streamFriendRequests(String userId) {
+    return _firestore.collection('users').doc(userId).collection('friend_requests')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => d.id).toList());
+  }
+  
   Future<void> updateLastActive(String userId) async {
     await _firestore.collection('users').doc(userId).update({
       'lastActive': FieldValue.serverTimestamp(),
