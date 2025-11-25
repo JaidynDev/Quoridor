@@ -16,6 +16,8 @@ class DatabaseService {
         // Initial Quoridor state
         'p1': {'x': 4, 'y': 0}, // Top (or bottom) center
         'p2': {'x': 4, 'y': 8}, // Bottom (or top) center
+        'p1WallsLeft': 10,
+        'p2WallsLeft': 10,
         'walls': [], // List of {x, y, orientation, owner}
       },
     );
