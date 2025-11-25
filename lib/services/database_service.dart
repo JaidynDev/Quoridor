@@ -135,4 +135,60 @@ class DatabaseService {
       return AppUser.fromMap(doc.data()!, doc.id);
     });
   }
+
+  Future<void> toggleFriend(String myId, String friendId) async {
+    final myRef = _firestore.collection('users').doc(myId);
+    
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(myRef);
+      if (!snapshot.exists) return;
+
+      final data = snapshot.data()!;
+      final friends = List<String>.from(data['friends'] ?? []);
+      
+      if (friends.contains(friendId)) {
+        friends.remove(friendId);
+      } else {
+        friends.add(friendId);
+      }
+      
+      transaction.update(myRef, {'friends': friends});
+    });
+  }
+
+  Future<void> updateLastActive(String userId) async {
+    await _firestore.collection('users').doc(userId).update({
+      'lastActive': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Stream<List<AppUser>> streamUsersByIds(List<String> userIds) {
+    if (userIds.isEmpty) return Stream.value([]);
+    // Chunking for whereIn limit of 10
+    final chunks = <List<String>>[];
+    for (var i = 0; i < userIds.length; i += 10) {
+      chunks.add(userIds.sublist(i, i + 10 > userIds.length ? userIds.length : i + 10));
+    }
+    
+    // Combine streams (simple implementation for first chunk only for now to avoid complexity without rxdart)
+    // Real production app would use Rx.combineLatest or similar.
+    // For now, we just return the first 10 friends.
+    return _firestore.collection('users')
+        .where(FieldPath.documentId, whereIn: chunks.first)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => AppUser.fromMap(d.data(), d.id)).toList());
+  }
+  
+  Future<List<AppUser>> searchUsers(String usernameQuery) async {
+    // Simple prefix search
+    if (usernameQuery.isEmpty) return [];
+    
+    final snapshot = await _firestore.collection('users')
+        .where('username', isGreaterThanOrEqualTo: usernameQuery)
+        .where('username', isLessThan: '${usernameQuery}z')
+        .limit(20)
+        .get();
+        
+    return snapshot.docs.map((doc) => AppUser.fromMap(doc.data(), doc.id)).toList();
+  }
 }

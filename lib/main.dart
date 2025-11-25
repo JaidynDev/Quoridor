@@ -90,7 +90,7 @@ class AppRouter extends StatelessWidget {
     );
 
     return MaterialApp.router(
-      title: 'Quoridor PWA',
+      title: 'Quoridor',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         useMaterial3: true,

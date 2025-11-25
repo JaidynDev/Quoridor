@@ -175,6 +175,12 @@ class _GameBoardState extends State<GameBoard> {
       validMoves = QuoridorLogic.getValidMoves(myPos, walls, [otherPos]);
     }
 
+    // Rotation Logic:
+    // If I am P1 (myIndex == 0), I start at Top (y=0). I want to be at Bottom. Rotate 180 (pi).
+    // If I am P2 (myIndex == 1), I start at Bottom (y=8). I am already at Bottom. No Rotation.
+    // If Spectator, keep default (P1 top, P2 bottom).
+    final double rotationAngle = (myIndex == 0) ? math.pi : 0;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.biggest.shortestSide;
@@ -188,42 +194,65 @@ class _GameBoardState extends State<GameBoard> {
             width: size,
             height: size,
             alignment: Alignment.center,
-            child: Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.identity()
-                ..setEntry(3, 2, _perspectiveValue)
-                ..rotateX(_tiltAngle),
-              child: SizedBox(
-                width: boardWidth,
-                height: boardHeight,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    // 1. Floor Grid (Base)
-                    _buildGrid(squareSize, validMoves, isMyTurn, walls, p1Pos, p2Pos),
+            child: Transform.rotate(
+              angle: rotationAngle,
+              child: Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..setEntry(3, 2, _perspectiveValue)
+                  ..rotateX(_tiltAngle),
+                child: SizedBox(
+                  width: boardWidth,
+                  height: boardHeight,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      // 1. Floor Grid (Base)
+                      _buildGrid(squareSize, validMoves, isMyTurn, walls, p1Pos, p2Pos),
 
-                    // 2. Render Objects (Players and Walls sorted by depth)
-                    ..._buildSortedObjects(p1Pos, p2Pos, walls, squareSize),
-                    
-                    // 3. Dragged Wall (Ghost)
-                    if (_draggedWall != null)
-                       _buildWall(_draggedWall!, squareSize, 
-                         _isValidPlacement ? Colors.green.withOpacity(0.7) : Colors.red.withOpacity(0.7),
-                         isGhost: true
-                       ),
+                      // 2. Render Objects (Players and Walls sorted by depth)
+                      // Note: Sorting depends on view direction.
+                      // If rotated 180, "far" is y=0 (visually top), "near" is y=8 (visually bottom).
+                      // Standard painter's algo: Draw "far" first.
+                      // Standard view (No rotation): Top (y=0) is Far. Bottom (y=8) is Near.
+                      //   So sort by Y ascending (0 drawn first, 8 drawn last).
+                      // Rotated view (180): Bottom (y=0) is Near. Top (y=8) is Far.
+                      //   Wait. If rotated 180:
+                      //   Grid (0,0) is at Bottom Right.
+                      //   Grid (0,8) is at Top Right.
+                      //   So y=8 is Top (Far). y=0 is Bottom (Near).
+                      //   We should draw y=8 first, then y=0?
+                      //   Let's re-verify Z-order.
+                      //   In 3D projection: Objects further away (smaller Z in camera space) draw first.
+                      //   With x-axis tilt (top away): Top of screen is Far. Bottom of screen is Near.
+                      //   If Rotated 180:
+                      //     y=0 is at Bottom of screen (Near).
+                      //     y=8 is at Top of screen (Far).
+                      //   So we should draw y=8 FIRST, then ... y=0 LAST.
+                      //   So we must reverse the sort order if rotated!
+                      
+                      ..._buildSortedObjects(p1Pos, p2Pos, walls, squareSize, reverseSort: myIndex == 0),
+                      
+                      // 3. Dragged Wall (Ghost)
+                      if (_draggedWall != null)
+                         _buildWall(_draggedWall!, squareSize, 
+                           _isValidPlacement ? Colors.green.withOpacity(0.7) : Colors.red.withOpacity(0.7),
+                           isGhost: true
+                         ),
 
-                    // 4. Touch Handling Layer (Invisible, on top of everything for drag)
-                    if (isMyTurn && myWallsLeft > 0)
-                      Positioned.fill(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onPanStart: (details) => _handleWallDrag(details.localPosition, squareSize, walls, p1Pos, p2Pos),
-                          onPanUpdate: (details) => _handleWallDrag(details.localPosition, squareSize, walls, p1Pos, p2Pos),
-                          onPanEnd: (details) => _finalizeWallPlacement(walls),
-                          onPanCancel: () => setState(() => _draggedWall = null),
+                      // 4. Touch Handling Layer (Invisible, on top of everything for drag)
+                      if (isMyTurn && myWallsLeft > 0)
+                        Positioned.fill(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onPanStart: (details) => _handleWallDrag(details.localPosition, squareSize, walls, p1Pos, p2Pos),
+                            onPanUpdate: (details) => _handleWallDrag(details.localPosition, squareSize, walls, p1Pos, p2Pos),
+                            onPanEnd: (details) => _finalizeWallPlacement(walls),
+                            onPanCancel: () => setState(() => _draggedWall = null),
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -273,7 +302,7 @@ class _GameBoardState extends State<GameBoard> {
     );
   }
 
-  List<Widget> _buildSortedObjects(Position p1Pos, Position p2Pos, List<Wall> walls, double squareSize) {
+  List<Widget> _buildSortedObjects(Position p1Pos, Position p2Pos, List<Wall> walls, double squareSize, {required bool reverseSort}) {
     // Create a list of renderable items with a Z-index (sort key)
     final items = <_RenderItem>[];
 
@@ -304,7 +333,13 @@ class _GameBoardState extends State<GameBoard> {
     }
 
     // Sort
-    items.sort((a, b) => a.z.compareTo(b.z));
+    if (reverseSort) {
+      // Descending Y (Far Y=8 to Near Y=0)
+      items.sort((a, b) => b.z.compareTo(a.z));
+    } else {
+      // Ascending Y (Far Y=0 to Near Y=8)
+      items.sort((a, b) => a.z.compareTo(b.z));
+    }
 
     return items.map((i) => i.widget).toList();
   }
@@ -538,8 +573,14 @@ class _GameBoardState extends State<GameBoard> {
     await db.updateGameState(widget.game.id, newState, nextTurn);
     
     // Check Win
-    if (myIndex == 0 && newPos.y == 8) db.setWinner(widget.game.id, widget.userId);
-    if (myIndex == 1 && newPos.y == 0) db.setWinner(widget.game.id, widget.userId);
+    // Note: We await this to ensure stats are updated.
+    // The UI will react to the stream update.
+    if (myIndex == 0 && newPos.y == 8) {
+      await db.setWinner(widget.game.id, widget.userId);
+    }
+    if (myIndex == 1 && newPos.y == 0) {
+      await db.setWinner(widget.game.id, widget.userId);
+    }
   }
   
   Future<void> _placeWall(Wall wall) async {
