@@ -169,6 +169,11 @@ class _GameBoardState extends State<GameBoard> {
         ? (widget.game.gameState['p1WallsLeft'] ?? 10) 
         : (widget.game.gameState['p2WallsLeft'] ?? 10);
 
+    // Flip Logic:
+    // P1 (myIndex == 0) starts at y=0 (Top). To view from Bottom, Flip both axes.
+    // P2 (myIndex == 1) starts at y=8 (Bottom). Already at Bottom. No Flip.
+    final bool shouldFlip = myIndex == 0;
+
     // Determine valid moves if my turn
     List<Position> validMoves = [];
     if (isMyTurn) {
@@ -176,12 +181,6 @@ class _GameBoardState extends State<GameBoard> {
       final otherPos = myIndex == 0 ? p2Pos : p1Pos;
       validMoves = QuoridorLogic.getValidMoves(myPos, walls, [otherPos]);
     }
-
-    // Rotation Logic:
-    // P1 (myIndex == 0) starts at y=0 (Top). To view from Bottom, Rotate 180.
-    // P2 (myIndex == 1) starts at y=8 (Bottom). Already at Bottom. No Rotation.
-    final bool shouldRotate = myIndex == 0;
-    final double rotationAngle = shouldRotate ? math.pi : 0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -201,8 +200,9 @@ class _GameBoardState extends State<GameBoard> {
               transform: Matrix4.identity()
                 ..setEntry(3, 2, _perspectiveValue)
                 ..rotateX(-_tiltAngle),
-              child: Transform.rotate(
-                angle: rotationAngle,
+              child: Transform.scale(
+                scaleX: shouldFlip ? -1.0 : 1.0,
+                scaleY: shouldFlip ? -1.0 : 1.0,
                 child: SizedBox(
                   width: boardWidth,
                   height: boardHeight,
@@ -213,7 +213,7 @@ class _GameBoardState extends State<GameBoard> {
                       _buildGrid(squareSize, validMoves, isMyTurn, walls, p1Pos, p2Pos),
 
                       // 2. Render Objects (Players and Walls sorted by depth)
-                      ..._buildSortedObjects(p1Pos, p2Pos, walls, squareSize, isRotated: shouldRotate),
+                      ..._buildSortedObjects(p1Pos, p2Pos, walls, squareSize, isFlipped: shouldFlip),
                       
                       // 3. Dragged Wall (Ghost)
                       if (_draggedWall != null)
@@ -262,6 +262,7 @@ class _GameBoardState extends State<GameBoard> {
                       return;
                     }
                     final target = Position(x, y);
+                    // With scale flip, coordinates are automatically transformed
                     if (validMoves.contains(target)) {
                       _makeMove(target, walls);
                     }
@@ -284,62 +285,54 @@ class _GameBoardState extends State<GameBoard> {
     );
   }
 
-  List<Widget> _buildSortedObjects(Position p1Pos, Position p2Pos, List<Wall> walls, double squareSize, {required bool isRotated}) {
+  List<Widget> _buildSortedObjects(Position p1Pos, Position p2Pos, List<Wall> walls, double squareSize, {required bool isFlipped}) {
     // Create a list of renderable items with a Z-index (sort key)
     final items = <_RenderItem>[];
 
-    // Transform positions when board is rotated 180 degrees
-    // When rotated, position (x, y) appears at (8-x, 8-y) visually
-    final p1DisplayPos = isRotated ? Position(8 - p1Pos.x, 8 - p1Pos.y) : p1Pos;
-    final p2DisplayPos = isRotated ? Position(8 - p2Pos.x, 8 - p2Pos.y) : p2Pos;
-
+    // With scale flip, positions are automatically transformed - no manual transformation needed
     // Add Players
     // Player Z is simply their Y position (row index)
     items.add(_RenderItem(
-      z: p1DisplayPos.y.toDouble(),
-      widget: _buildPlayer(p1DisplayPos, Colors.white, squareSize, widget.p1User, isRotated: isRotated),
+      z: p1Pos.y.toDouble(),
+      widget: _buildPlayer(p1Pos, Colors.white, squareSize, widget.p1User, isFlipped: isFlipped),
     ));
     items.add(_RenderItem(
-      z: p2DisplayPos.y.toDouble(),
-      widget: _buildPlayer(p2DisplayPos, Colors.black, squareSize, widget.p2User, isRotated: isRotated),
+      z: p2Pos.y.toDouble(),
+      widget: _buildPlayer(p2Pos, Colors.black, squareSize, widget.p2User, isFlipped: isFlipped),
     ));
 
     // Add Walls
     for (final wall in walls) {
-      // Transform wall position when board is rotated
-      final wallDisplayPos = isRotated 
-        ? Wall(8 - wall.x, 8 - wall.y, wall.orientation)
-        : wall;
-      
       double z;
-      if (wallDisplayPos.orientation == 0) {
-        z = wallDisplayPos.y + 0.8; 
+      if (wall.orientation == 0) {
+        z = wall.y + 0.8; 
       } else {
-        z = wallDisplayPos.y + 1.8; // Vertical wall ends at grid line y+2.
+        z = wall.y + 1.8; // Vertical wall ends at grid line y+2.
       }
       
       items.add(_RenderItem(
         z: z,
-        widget: _buildWall(wallDisplayPos, squareSize, Colors.brown[800]!),
+        widget: _buildWall(wall, squareSize, Colors.brown[800]!),
       ));
     }
 
     // Sort
-    if (isRotated) {
-      // Descending Y (Far Y=8 to Near Y=0)
+    if (isFlipped) {
+      // Descending Y (Far Y=8 to Near Y=0) - flipped view
       items.sort((a, b) => b.z.compareTo(a.z));
     } else {
-      // Ascending Y (Far Y=0 to Near Y=8)
+      // Ascending Y (Far Y=0 to Near Y=8) - normal view
       items.sort((a, b) => a.z.compareTo(b.z));
     }
 
     return items.map((i) => i.widget).toList();
   }
 
-  Widget _buildPlayer(Position pos, Color color, double size, AppUser? user, {required bool isRotated}) {
+  Widget _buildPlayer(Position pos, Color color, double size, AppUser? user, {required bool isFlipped}) {
     // Visual offset to center the player better on the tile
-    // When rotated, the offset direction is inverted
-    final double visualOffset = isRotated ? 0.85 : -0.85; 
+    // When flipped, the offset direction is inverted
+    // Host pieces lowered by 1 whole square (subtract 1.0 from offset to move down)
+    final double visualOffset = isFlipped ? -2.15 : -0.85; 
 
     return Positioned(
       left: pos.x * size,
@@ -355,7 +348,7 @@ class _GameBoardState extends State<GameBoard> {
         child: Transform(
           transform: Matrix4.identity()
             ..translateByVector3(Vector3(0.0, size * 0.5, 0.0)) // Pivot correction
-            ..rotateZ(isRotated ? math.pi : 0) // Correct Rotation for facing
+            ..rotateZ(isFlipped ? math.pi : 0) // Correct Rotation for facing
             ..rotateX(_tiltAngle) // Tilt forward to counter board back-tilt
             ..translateByVector3(Vector3(0.0, -size * 0.5, 0.0)),
           alignment: Alignment.bottomCenter,
