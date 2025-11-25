@@ -342,10 +342,10 @@ class _GameBoardState extends State<GameBoard> {
         },
         child: Transform(
           transform: Matrix4.identity()
-            ..translate(0.0, size * 0.5) // Pivot correction
+            ..translateByDouble(0.0, size * 0.5, 0.0, 0.0) // Pivot correction
             ..rotateZ(isRotated ? math.pi : 0) // Correct Rotation for facing
             ..rotateX(_tiltAngle) // Tilt forward to counter board back-tilt
-            ..translate(0.0, -size * 0.5),
+            ..translateByDouble(0.0, -size * 0.5, 0.0, 0.0),
           alignment: Alignment.bottomCenter,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -440,9 +440,9 @@ class _GameBoardState extends State<GameBoard> {
           // The Wall Body (Standing up)
           Transform(
             transform: Matrix4.identity()
-              ..translate(0.0, height) // Move to bottom of footprint
+              ..translateByDouble(0.0, height, 0.0, 0.0) // Move to bottom of footprint
               ..rotateX(-math.pi / 2) // Rotate 90 deg to stand up
-              ..translate(0.0, -wallHeight), // Move up by height
+              ..translateByDouble(0.0, -wallHeight, 0.0, 0.0), // Move up by height
             alignment: Alignment.bottomCenter, // Pivot at bottom
             child: Container(
                width: width,
