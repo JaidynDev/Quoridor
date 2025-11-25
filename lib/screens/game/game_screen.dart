@@ -351,10 +351,8 @@ class _GameBoardState extends State<GameBoard> {
         },
         child: Transform(
           transform: Matrix4.identity()
-            ..translate(0.0, size * 0.5) // Pivot correction
             ..rotateZ(isRotated ? math.pi : 0) // Correct Rotation
-            ..rotateX(_tiltAngle) // Counter tilt to stand up
-            ..translate(0.0, -size * 0.5),
+            ..rotateX(isRotated ? _tiltAngle : -_tiltAngle), // Counter tilt to stand up
           alignment: Alignment.bottomCenter,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.end,

@@ -63,6 +63,7 @@ class DatabaseService {
   Future<void> setWinner(String gameId, String winnerId) async {
     final gameRef = _firestore.collection('games').doc(gameId);
 
+    // 1. Update Game Status (Priority)
     await _firestore.runTransaction((transaction) async {
       final gameSnapshot = await transaction.get(gameRef);
       if (!gameSnapshot.exists) throw Exception("Game not found");
@@ -70,52 +71,60 @@ class DatabaseService {
       final gameData = gameSnapshot.data()!;
       if (gameData['status'] == 'finished') return; // Already finished
 
+      transaction.update(gameRef, {
+        'status': 'finished',
+        'winnerId': winnerId,
+      });
+    });
+
+    // 2. Update User Stats (Best Effort)
+    // We do this outside the game transaction so a permission error here doesn't stop the game from ending.
+    try {
+      final gameSnapshot = await gameRef.get();
+      final gameData = gameSnapshot.data()!;
       final playerIds = List<String>.from(gameData['playerIds']);
+      
       String? loserId;
       if (playerIds.contains(winnerId)) {
         loserId = playerIds.firstWhere((id) => id != winnerId, orElse: () => '');
       }
 
-      // Update Game
-      transaction.update(gameRef, {
-        'status': 'finished',
-        'winnerId': winnerId,
-      });
-
-      // Update User Stats
-      final winnerRef = _firestore.collection('users').doc(winnerId);
-      // Use set with merge to create if not exists (though users should exist)
-      transaction.set(winnerRef, {
+      // Update Winner Stats
+      await _firestore.collection('users').doc(winnerId).set({
         'wins': FieldValue.increment(1),
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true)).catchError((e) => print("Error updating winner stats: $e"));
 
+      // Update Loser Stats (Only if permissions allow, otherwise this might fail silently on client)
       if (loserId != null && loserId.isNotEmpty) {
-        final loserRef = _firestore.collection('users').doc(loserId);
-        transaction.set(loserRef, {
+        await _firestore.collection('users').doc(loserId).set({
           'losses': FieldValue.increment(1),
-        }, SetOptions(merge: true));
+        }, SetOptions(merge: true)).catchError((e) => print("Error updating loser stats: $e"));
 
-        // Update Series Stats
+        // Update Series Stats (Shared document, usually allowed if public/shared)
         final p1 = winnerId.compareTo(loserId) < 0 ? winnerId : loserId;
         final p2 = winnerId.compareTo(loserId) < 0 ? loserId : winnerId;
         final seriesId = '${p1}_${p2}';
         final seriesRef = _firestore.collection('series').doc(seriesId);
 
-        final seriesSnapshot = await transaction.get(seriesRef);
-        if (!seriesSnapshot.exists) {
-          transaction.set(seriesRef, {
-            'player1Id': p1,
-            'player2Id': p2,
-            'p1Wins': winnerId == p1 ? 1 : 0,
-            'p2Wins': winnerId == p2 ? 1 : 0,
-          });
-        } else {
-          transaction.update(seriesRef, {
-            winnerId == p1 ? 'p1Wins' : 'p2Wins': FieldValue.increment(1),
-          });
-        }
+        await _firestore.runTransaction((t) async {
+           final sSnap = await t.get(seriesRef);
+           if (!sSnap.exists) {
+             t.set(seriesRef, {
+               'player1Id': p1,
+               'player2Id': p2,
+               'p1Wins': winnerId == p1 ? 1 : 0,
+               'p2Wins': winnerId == p2 ? 1 : 0,
+             });
+           } else {
+             t.update(seriesRef, {
+               winnerId == p1 ? 'p1Wins' : 'p2Wins': FieldValue.increment(1),
+             });
+           }
+        }).catchError((e) => print("Error updating series stats: $e"));
       }
-    });
+    } catch (e) {
+      print("Error in stats update: $e");
+    }
   }
 
   Stream<Map<String, dynamic>?> streamSeriesStats(String p1, String p2) {
