@@ -312,7 +312,7 @@ class _GameBoardState extends State<GameBoard> {
       
       items.add(_RenderItem(
         z: z,
-        widget: _buildWall(wall, squareSize, Colors.brown[800]!),
+        widget: _buildWall(wall, squareSize, Colors.brown[800]!, isFlipped: isFlipped),
       ));
     }
 
@@ -387,7 +387,7 @@ class _GameBoardState extends State<GameBoard> {
       ),
     );
   }
-  Widget _buildWall(Wall wall, double gridSize, Color color, {bool isGhost = false}) {
+  Widget _buildWall(Wall wall, double gridSize, Color color, {bool isGhost = false, bool isFlipped = false}) {
     double top, left, width, height;
     final thickness = gridSize * 0.2;  
     final length = gridSize * 2 + gridSize * 0.1;
@@ -433,23 +433,27 @@ class _GameBoardState extends State<GameBoard> {
       top: top,
       width: width,
       height: height, // Base footprint
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // Shadow/Base
-          Container(
-            width: width,
-            height: height,
-            color: Colors.black26,
-          ),
-          // The Wall Body (Standing up)
-          Transform(
-            transform: Matrix4.identity()
-              ..translateByVector3(Vector3(0.0, height, 0.0)) // Move to bottom of footprint
-              ..rotateX(-math.pi / 2) // Rotate 90 deg to stand up
-              ..translateByVector3(Vector3(0.0, -wallHeight, 0.0)), // Move up by height
-            alignment: Alignment.bottomCenter, // Pivot at bottom
-            child: Container(
+      child: Transform.scale(
+        scaleX: isFlipped ? -1.0 : 1.0,
+        scaleY: isFlipped ? -1.0 : 1.0,
+        alignment: Alignment.center,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // Shadow/Base
+            Container(
+              width: width,
+              height: height,
+              color: Colors.black26,
+            ),
+            // The Wall Body (Standing up)
+            Transform(
+              transform: Matrix4.identity()
+                ..translateByVector3(Vector3(0.0, height, 0.0)) // Move to bottom of footprint
+                ..rotateX(-math.pi / 2) // Rotate 90 deg to stand up
+                ..translateByVector3(Vector3(0.0, -wallHeight, 0.0)), // Move up by height
+              alignment: Alignment.bottomCenter, // Pivot at bottom
+              child: Container(
                width: width,
                height: wallHeight,
                decoration: BoxDecoration(
@@ -485,8 +489,9 @@ class _GameBoardState extends State<GameBoard> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
 
   void _handleWallDrag(Offset localPos, double squareSize, List<Wall> currentWalls, Position p1, Position p2) {

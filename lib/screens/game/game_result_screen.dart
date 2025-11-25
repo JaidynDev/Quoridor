@@ -50,13 +50,26 @@ class GameResultScreen extends StatelessWidget {
               const SizedBox(height: 40),
               
               ElevatedButton(
+                onPressed: () async {
+                  await db.resetGame(game.id);
+                  if (context.mounted) Navigator.of(context).pop(); // Close result screen and return to game
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                ),
+                child: const Text("Rematch", style: TextStyle(color: Colors.white)),
+              ),
+              const SizedBox(height: 20),
+              OutlinedButton(
                 onPressed: () {
                   Navigator.of(context).pop(); // Close result screen
                 },
-                style: ElevatedButton.styleFrom(
+                style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  side: const BorderSide(color: Colors.white),
                 ),
-                child: const Text("Back to Menu"),
+                child: const Text("Back to Menu", style: TextStyle(color: Colors.white)),
               ),
             ],
           ),

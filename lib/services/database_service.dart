@@ -247,6 +247,20 @@ class DatabaseService {
         .map((snap) => snap.docs.map((d) => AppUser.fromMap(d.data(), d.id)).toList());
   }
   
+  Future<void> resetGame(String gameId) async {
+    await _firestore.collection('games').doc(gameId).update({
+      'status': 'playing',
+      'winnerId': null,
+      'currentTurn': 0,
+      'p1': {'x': 4, 'y': 0},
+      'p2': {'x': 4, 'y': 8},
+      'walls': [],
+      'p1WallsLeft': 10,
+      'p2WallsLeft': 10,
+      'moveLog': [], // Clear move log
+    });
+  }
+
   Future<List<AppUser>> searchUsers(String usernameQuery) async {
     // Simple prefix search
     if (usernameQuery.isEmpty) return [];
