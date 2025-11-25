@@ -28,9 +28,8 @@ class GameModel {
   final String? winnerId;
   final int currentTurnIndex; // 0 or 1
   // Game State
-  // For simplicity, we'll store the last move or full state. 
-  // In Quoridor: Player positions, Wall positions.
   final Map<String, dynamic> gameState; 
+  final List<Map<String, dynamic>> moveLog;
 
   GameModel({
     required this.id,
@@ -41,6 +40,7 @@ class GameModel {
     this.winnerId,
     this.currentTurnIndex = 0,
     required this.gameState,
+    this.moveLog = const [],
   });
 
   Map<String, dynamic> toMap() {
@@ -52,6 +52,7 @@ class GameModel {
       'winnerId': winnerId,
       'currentTurnIndex': currentTurnIndex,
       'gameState': gameState,
+      'moveLog': moveLog,
     };
   }
 
@@ -65,6 +66,7 @@ class GameModel {
       winnerId: map['winnerId'],
       currentTurnIndex: map['currentTurnIndex'] ?? 0,
       gameState: map['gameState'] ?? {},
+      moveLog: List<Map<String, dynamic>>.from(map['moveLog'] ?? []),
     );
   }
 }

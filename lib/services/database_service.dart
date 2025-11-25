@@ -53,11 +53,17 @@ class DatabaseService {
     });
   }
 
-  Future<void> updateGameState(String gameId, Map<String, dynamic> newState, int nextTurn) async {
-    await _firestore.collection('games').doc(gameId).update({
+  Future<void> updateGameState(String gameId, Map<String, dynamic> newState, int nextTurn, {Map<String, dynamic>? logEntry}) async {
+    final updates = <String, dynamic>{
       'gameState': newState,
       'currentTurnIndex': nextTurn,
-    });
+    };
+    
+    if (logEntry != null) {
+      updates['moveLog'] = FieldValue.arrayUnion([logEntry]);
+    }
+
+    await _firestore.collection('games').doc(gameId).update(updates);
   }
   
   Future<void> setWinner(String gameId, String winnerId) async {

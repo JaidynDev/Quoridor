@@ -331,18 +331,62 @@ class _GameBoardState extends State<GameBoard> {
     // We rotate X by -_tiltAngle.
     // We also need to position it correctly.
     
-    // If Board is Rotated 180, we need to correct the player facing.
-    // Otherwise they will be upside down / facing away? 
-    // Board Rotation Z(180) -> Rotates Local Y to -Y.
-    // Player stands in Local Z.
-    // So Player facing is rotated 180.
-    // We need to rotate Z(180) to correct it.
+    // Adjust visual position.
+    // Previous: top = pos.y * size - (size * 0.5)
+    // If "move down one square" means physically down on screen, we increase top.
+    // Maybe the user feels the character is standing too "far back"?
+    // Let's try shifting it down slightly.
+    // -0.5 size is a large offset (half a tile). 
+    // If the avatar base is at the bottom of the container, and container is 1.5x tile height.
+    // Top at y - 0.5. Bottom at y - 0.5 + 1.5 = y + 1.0.
+    // This aligns the bottom of the container with the bottom of the tile.
+    // If the user thinks it's "messed up" (too high/far), maybe the pivot is wrong?
+    // In isRotated view (P1 at bottom), if the logic uses y=0 at bottom?
+    // Wait, Transform.rotate(pi) rotates the entire board container.
+    // But we are drawing children at `top` based on `y`.
+    // If rotated, `top: 0` becomes bottom of screen?
+    // `Transform.rotate` pivots around center.
+    // If `top` increases, it moves "down" in unrotated space.
+    // In rotated space (180), increasing `top` moves "up" the screen?
+    // Yes.
+    // So if P1 is rotated, and we render P1 at y=0 (Start).
+    // y=0 is small. `top` is small.
+    // In unrotated, that's Top of screen.
+    // In rotated, that's Bottom of screen.
+    // So P1 at y=0 appears at Bottom.
+    // If the user says "move down one square" for the Host (P1, Bottom).
+    // "Down" on screen?
+    // To move "Down" on screen in rotated view, we need to *decrease* `top` (move towards "Top" of unrotated).
+    // Wait. 
+    // Unrotated: Top=0 (Screen Top). Top=Max (Screen Bottom).
+    // Rotated 180: Top=0 (Screen Bottom). Top=Max (Screen Top).
+    // If we want to move "Down" on screen (towards Screen Bottom).
+    // We need to move towards Top=0 (in Rotated space).
+    // So we need *smaller* y (or visual offset).
+    // But P1 is already at y=0. Can't go smaller?
+    // Unless we adjust the visual offset `- (size * 0.5)`.
+    // If we make it `- (size * 0.2)`, `top` increases.
+    // Increased `top` -> moves towards Top=Max -> Screen Top.
+    // So to move Down (Screen Bottom), we need to *decrease* `top`.
+    // `- (size * 0.8)`?
+    // Let's try adjusting the offset logic.
+    // Also, the user said "move down one square". Maybe they literally mean +1 tile?
+    // But that would change logic.
     
+    // Let's try a smaller tweak first: move the shadow anchor point?
+    // Or maybe just shift the rendering offset to be more centered?
+    // I will change offset from -0.5 to -0.25?
+    // If I increase the value (-0.5 -> -0.25 is increasing), I move "Up" screen (in rotated view).
+    // User wants "Down".
+    // So I should decrease the value (-0.5 -> -0.75).
+    
+    final double visualOffset = -0.75; 
+
     return Positioned(
       left: pos.x * size,
-      top: pos.y * size - (size * 0.5), // Shift up slightly to stand on tile
+      top: pos.y * size + (size * visualOffset), 
       width: size,
-      height: size * 1.5, // Taller container for standing character
+      height: size * 1.5, 
       child: GestureDetector(
         onTap: () {
           if (user != null) {
@@ -351,8 +395,10 @@ class _GameBoardState extends State<GameBoard> {
         },
         child: Transform(
           transform: Matrix4.identity()
+            ..translate(0.0, size * 0.5) // Pivot correction
             ..rotateZ(isRotated ? math.pi : 0) // Correct Rotation
-            ..rotateX(isRotated ? _tiltAngle : -_tiltAngle), // Counter tilt to stand up
+            ..rotateX(isRotated ? _tiltAngle : -_tiltAngle) // Counter tilt
+            ..translate(0.0, -size * 0.5),
           alignment: Alignment.bottomCenter,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -389,7 +435,6 @@ class _GameBoardState extends State<GameBoard> {
       ),
     );
   }
-
   Widget _buildWall(Wall wall, double gridSize, Color color, {bool isGhost = false}) {
     double top, left, width, height;
     final thickness = gridSize * 0.2;  
@@ -561,16 +606,27 @@ class _GameBoardState extends State<GameBoard> {
       newState['p2'] = {'x': newPos.x, 'y': newPos.y};
     }
     
+    // Create Log Entry
+    final logEntry = {
+      'playerId': widget.userId,
+      'type': 'move',
+      'to': {'x': newPos.x, 'y': newPos.y},
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+
     final nextTurn = (widget.game.currentTurnIndex + 1) % 2;
-    await db.updateGameState(widget.game.id, newState, nextTurn);
+    
+    print("Making move for $myIndex to ${newPos.y}");
+    
+    await db.updateGameState(widget.game.id, newState, nextTurn, logEntry: logEntry);
     
     // Check Win
-    // Note: We await this to ensure stats are updated.
-    // The UI will react to the stream update.
-    if (myIndex == 0 && newPos.y == 8) {
-      await db.setWinner(widget.game.id, widget.userId);
-    }
-    if (myIndex == 1 && newPos.y == 0) {
+    bool won = false;
+    if (myIndex == 0 && newPos.y == 8) won = true;
+    if (myIndex == 1 && newPos.y == 0) won = true;
+    
+    if (won) {
+      print("WINNER DETECTED: ${widget.userId}");
       await db.setWinner(widget.game.id, widget.userId);
     }
   }
@@ -592,8 +648,15 @@ class _GameBoardState extends State<GameBoard> {
        newState['p2WallsLeft'] = (newState['p2WallsLeft'] ?? 10) - 1;
     }
     
+    final logEntry = {
+      'playerId': widget.userId,
+      'type': 'wall',
+      'wall': {'x': wall.x, 'y': wall.y, 'o': wall.orientation},
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+
     final nextTurn = (widget.game.currentTurnIndex + 1) % 2;
-    await db.updateGameState(widget.game.id, newState, nextTurn);
+    await db.updateGameState(widget.game.id, newState, nextTurn, logEntry: logEntry);
   }
 }
 
