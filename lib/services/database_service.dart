@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/game_model.dart';
 import '../models/user_model.dart';
 
@@ -144,8 +145,26 @@ class DatabaseService {
     });
   }
 
-  Stream<AppUser?> streamUser(String userId) {
-    return _firestore.collection('users').doc(userId).snapshots().map((doc) {
+  Stream<AppUser?> streamUser(String userId) async* {
+    // Check if this is a guest user
+    if (userId.startsWith('guest_')) {
+      // For guest users, fetch from local storage
+      final prefs = await SharedPreferences.getInstance();
+      final username = prefs.getString('guest_username') ?? 'Guest${userId.substring(0, 12)}';
+      final photoUrl = prefs.getString('guest_photo_url');
+      
+      yield AppUser(
+        id: userId,
+        email: '',
+        username: username,
+        photoUrl: photoUrl,
+        isGuest: true,
+      );
+      return;
+    }
+    
+    // For authenticated users, fetch from Firestore
+    yield* _firestore.collection('users').doc(userId).snapshots().map((doc) {
       if (!doc.exists) return null;
       return AppUser.fromMap(doc.data()!, doc.id);
     });
@@ -230,21 +249,56 @@ class DatabaseService {
     });
   }
 
-  Stream<List<AppUser>> streamUsersByIds(List<String> userIds) {
-    if (userIds.isEmpty) return Stream.value([]);
-    // Chunking for whereIn limit of 10
-    final chunks = <List<String>>[];
-    for (var i = 0; i < userIds.length; i += 10) {
-      chunks.add(userIds.sublist(i, i + 10 > userIds.length ? userIds.length : i + 10));
+  Stream<List<AppUser>> streamUsersByIds(List<String> userIds) async* {
+    if (userIds.isEmpty) {
+      yield [];
+      return;
     }
     
-    // Combine streams (simple implementation for first chunk only for now to avoid complexity without rxdart)
-    // Real production app would use Rx.combineLatest or similar.
-    // For now, we just return the first 10 friends.
-    return _firestore.collection('users')
-        .where(FieldPath.documentId, whereIn: chunks.first)
-        .snapshots()
-        .map((snap) => snap.docs.map((d) => AppUser.fromMap(d.data(), d.id)).toList());
+    // Separate guest users from authenticated users
+    final guestIds = userIds.where((id) => id.startsWith('guest_')).toList();
+    final authIds = userIds.where((id) => !id.startsWith('guest_')).toList();
+    
+    final users = <AppUser>[];
+    
+    // Fetch guest users from local storage
+    if (guestIds.isNotEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      for (final guestId in guestIds) {
+        final username = prefs.getString('guest_username') ?? 'Guest${guestId.substring(0, 12)}';
+        final photoUrl = prefs.getString('guest_photo_url');
+        users.add(AppUser(
+          id: guestId,
+          email: '',
+          username: username,
+          photoUrl: photoUrl,
+          isGuest: true,
+        ));
+      }
+    }
+    
+    // Fetch authenticated users from Firestore
+    if (authIds.isNotEmpty) {
+      // Chunking for whereIn limit of 10
+      final chunks = <List<String>>[];
+      for (var i = 0; i < authIds.length; i += 10) {
+        chunks.add(authIds.sublist(i, i + 10 > authIds.length ? authIds.length : i + 10));
+      }
+      
+      // For now, just return the first 10 authenticated users
+      if (chunks.isNotEmpty) {
+        await for (final snap in _firestore.collection('users')
+            .where(FieldPath.documentId, whereIn: chunks.first)
+            .snapshots()) {
+          final authUsers = snap.docs.map((d) => AppUser.fromMap(d.data(), d.id)).toList();
+          yield [...users, ...authUsers];
+        }
+      } else {
+        yield users;
+      }
+    } else {
+      yield users;
+    }
   }
   
   Future<void> requestRematch(String gameId, String userId) async {

@@ -9,6 +9,7 @@ class AppUser {
   final int losses;
   final List<String> friends;
   final DateTime? lastActive;
+  final bool isGuest;
 
   AppUser({
     required this.id,
@@ -19,6 +20,7 @@ class AppUser {
     this.losses = 0,
     this.friends = const [],
     this.lastActive,
+    this.isGuest = false,
   });
 
   factory AppUser.fromMap(Map<String, dynamic> data, String id) {
@@ -33,6 +35,7 @@ class AppUser {
       lastActive: data['lastActive'] != null 
         ? (data['lastActive'] as Timestamp).toDate() 
         : null,
+      isGuest: data['isGuest'] ?? false,
     );
   }
 
@@ -45,6 +48,7 @@ class AppUser {
       'losses': losses,
       'friends': friends,
       'lastActive': lastActive != null ? Timestamp.fromDate(lastActive!) : null,
+      'isGuest': isGuest,
     };
   }
 }

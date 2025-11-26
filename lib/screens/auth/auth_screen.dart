@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import '../../services/auth_service.dart';
+import '../../services/guest_service.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -145,6 +147,16 @@ class _AuthScreenState extends State<AuthScreen> {
                       onPressed: () => setState(() => _isLogin = !_isLogin),
                       child: Text(_isLogin ? 'Create an account' : 'Have an account? Sign In'),
                     ),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: _isLoading ? null : _playAsGuest,
+                        child: const Text('Play as Guest'),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -154,5 +166,25 @@ class _AuthScreenState extends State<AuthScreen> {
       ),
       ),
     );
+  }
+
+  Future<void> _playAsGuest() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final guestService = context.read<GuestService>();
+      await guestService.getGuestUser(); // This will create/retrieve guest user
+      // The StreamProvider will pick up the guest user and navigate automatically
+      if (mounted) {
+        context.go('/');
+      }
+    } catch (e) {
+      setState(() => _errorMessage = e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 }

@@ -387,13 +387,35 @@ class _GameBoardState extends State<GameBoard> {
       ),
     );
   }
+  // ============================================================================
+  // WALL RENDERING - EDIT THIS SECTION TO CHANGE HOW WALLS LOOK
+  // ============================================================================
+  // 
+  // A wall is a 3D rectangle that spans 2 squares.
+  // It has 5 visible faces: Top, Front, Back, Left, Right
+  // 
+  // COORDINATE SYSTEM:
+  //   - X: horizontal (left/right)
+  //   - Y: vertical (up/down on screen, but represents forward/back in 3D)
+  //   - Z: depth (how tall the wall stands up)
+  //
+  // DIMENSIONS (EDIT THESE):
+  //   - length: 2 squares (gridSize * 2.0) - EDIT: Change wall length
+  //   - thickness: 0.2 squares (gridSize * 0.2) - EDIT: Change wall thickness
+  //   - height: 0.6 squares (gridSize * 0.6) - EDIT: Change how tall wall stands
+  //
+  // COLORS (EDIT THESE):
+  //   - mainColor: Dark brown for long faces - EDIT: Line 430
+  //   - capColor: Light brown for short end faces - EDIT: Line 431
+  //   - topColor: Medium brown for top face - EDIT: Line 432
+  // ============================================================================
+  
   Widget _buildWall(Wall wall, double gridSize, Color color, {bool isGhost = false, bool isFlipped = false}) {
     double top, left, width, height;
-    final thickness = gridSize * 0.2;  
-    final length = gridSize * 2.0; // Exactly 2 squares
-
-    // For 3D effect, we draw a container that looks like a block
-    // We can use a stack of faces or just a styled container
+    
+    // ===== EDIT THESE DIMENSIONS =====
+    final thickness = gridSize * 0.2;  // EDIT: Wall thickness (how wide it is)
+    final length = gridSize * 2.0;     // EDIT: Wall length (exactly 2 squares)
     
     if (wall.orientation == 0) { // Horizontal
       left = wall.x * gridSize; 
@@ -423,13 +445,12 @@ class _GameBoardState extends State<GameBoard> {
       );
     }
 
-    // 3D Wall Construction
-    final wallHeight = gridSize * 0.6; 
+    // ===== EDIT THESE COLORS =====
+    final wallHeight = gridSize * 0.6;  // EDIT: How tall the wall stands (Z dimension)
     
-    // Colors
-    final mainColor = Color(0xFF3E2723); // Dark Brown (Brown 900)
-    final capColor = Color(0xFF8D6E63); // Lighter Brown (Brown 400)
-    final topColor = Color(0xFF4E342E); // Slightly lighter Dark Brown (Brown 800)
+    final mainColor = Color(0xFF3E2723); // EDIT: Dark Brown - used for long faces
+    final capColor = Color(0xFF8D6E63);  // EDIT: Light Brown - used for short end faces  
+    final topColor = Color(0xFF4E342E);  // EDIT: Medium Brown - used for top face
 
     // Identify Long vs Short faces
     final isHorizontal = width > height;
@@ -448,32 +469,33 @@ class _GameBoardState extends State<GameBoard> {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            // 1. Shadow
+            // ===== FACE 1: SHADOW (Base layer) =====
+            // EDIT: Change shadow color/opacity here
             Container(
               width: width,
               height: height,
-              color: Colors.black26,
+              color: Colors.black26,  // EDIT: Change shadow color
             ),
 
-            // 2. Faces sorted by depth relative to viewer
-            
-            // For Side Faces (Left/Right), simple order is usually fine as they are thin/don't overlap much from front view
-            // Left Face (X=0)
+            // ===== FACE 2: LEFT SIDE (X = 0) =====
+            // EDIT: Change left side appearance here
             Transform(
               transform: Matrix4.identity()..rotateY(-math.pi / 2),
               alignment: Alignment.centerLeft,
               child: Container(
                  width: wallHeight, height: height, 
-                 decoration: BoxDecoration(color: sideColor),
+                 decoration: BoxDecoration(color: sideColor),  // EDIT: Change color
               ),
             ),
-            // Right Face (X=width)
+            
+            // ===== FACE 3: RIGHT SIDE (X = width) =====
+            // EDIT: Change right side appearance here
             Transform(
               transform: Matrix4.identity()..translateByVector3(Vector3(width, 0.0, 0.0))..rotateY(-math.pi / 2),
               alignment: Alignment.centerLeft,
               child: Container(
                  width: wallHeight, height: height, 
-                 decoration: BoxDecoration(color: sideColor),
+                 decoration: BoxDecoration(color: sideColor),  // EDIT: Change color
               ),
             ),
 
@@ -493,16 +515,17 @@ class _GameBoardState extends State<GameBoard> {
                _buildFrontFace(width, height, wallHeight, frontBackColor),
             ],
 
-            // 3. Top Cap (Always on top)
+            // ===== FACE 6: TOP FACE (Always drawn last, on top) =====
+            // EDIT: Change top face appearance here
             Transform(
               transform: Matrix4.identity()..translateByVector3(Vector3(0.0, 0.0, wallHeight)),
               child: Container(
                  width: width,
                  height: height,
                  decoration: BoxDecoration(
-                   color: topColor,
-                   borderRadius: BorderRadius.circular(1),
-                   border: Border.all(color: Colors.black12, width: 0.5),
+                   color: topColor,  // EDIT: Change top color
+                   borderRadius: BorderRadius.circular(1),  // EDIT: Change corner rounding
+                   border: Border.all(color: Colors.black12, width: 0.5),  // EDIT: Change border
                  ),
               ),
             ),
@@ -512,6 +535,8 @@ class _GameBoardState extends State<GameBoard> {
     );
   }
 
+  // ===== HELPER: Build the FRONT face (near face, closest to viewer) =====
+  // EDIT: Change front face appearance here
   Widget _buildFrontFace(double width, double height, double wallHeight, Color color) {
     return Transform(
       transform: Matrix4.identity()
@@ -521,20 +546,22 @@ class _GameBoardState extends State<GameBoard> {
       child: Container(
          width: width, height: wallHeight, 
          decoration: BoxDecoration(
-           color: color,
-           border: Border.all(color: Colors.black26, width: 0.5),
+           color: color,  // EDIT: Change front face color
+           border: Border.all(color: Colors.black26, width: 0.5),  // EDIT: Change border
          ),
       ),
     );
   }
 
+  // ===== HELPER: Build the BACK face (far face, furthest from viewer) =====
+  // EDIT: Change back face appearance here
   Widget _buildBackFace(double width, double height, double wallHeight, Color color) {
     return Transform(
       transform: Matrix4.identity()..rotateX(math.pi / 2),
       alignment: Alignment.topCenter, 
       child: Container(
          width: width, height: wallHeight, 
-         decoration: BoxDecoration(color: color),
+         decoration: BoxDecoration(color: color),  // EDIT: Change back face color
       ),
     );
   }

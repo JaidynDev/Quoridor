@@ -1,10 +1,16 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
+import 'guest_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  GuestService? _guestService;
+  
+  void setGuestService(GuestService guestService) {
+    _guestService = guestService;
+  }
 
   Stream<AppUser?> get user {
     return _auth.authStateChanges().asyncMap((User? user) async {
@@ -18,12 +24,23 @@ class AuthService {
     });
   }
 
+  /// Get current authenticated user or null
+  AppUser? get currentUser {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    // This is a synchronous getter, so we can't fetch from Firestore here
+    // The StreamProvider will handle the async loading
+    return null;
+  }
+
   Future<AppUser?> signIn(String email, String password) async {
     try {
       UserCredential result = await _auth.signInWithEmailAndPassword(
           email: email, password: password);
       User? user = result.user;
       if (user != null) {
+        // Clear guest data when signing in
+        _guestService?.clearGuestData();
         final doc = await _firestore.collection('users').doc(user.uid).get();
         return AppUser.fromMap(doc.data()!, user.uid);
       }
@@ -39,6 +56,8 @@ class AuthService {
           email: email, password: password);
       User? user = result.user;
       if (user != null) {
+        // Clear guest data when signing up
+        _guestService?.clearGuestData();
         final newUser = AppUser(
           id: user.uid,
           email: email,

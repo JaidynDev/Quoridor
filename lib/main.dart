@@ -6,6 +6,7 @@ import 'firebase_options.dart';
 import 'models/user_model.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
+import 'services/guest_service.dart';
 import 'screens/auth/auth_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/lobby/lobby_screen.dart';
@@ -33,19 +34,45 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        Provider<GuestService>(
+          create: (_) => GuestService(),
+        ),
         Provider<AuthService>(
-          create: (_) => AuthService(),
+          create: (context) {
+            final auth = AuthService();
+            auth.setGuestService(context.read<GuestService>());
+            return auth;
+          },
         ),
         Provider<DatabaseService>(
           create: (_) => DatabaseService(),
         ),
         StreamProvider<AppUser?>(
-          create: (context) => context.read<AuthService>().user,
+          create: (context) => _createUserStream(context),
           initialData: null,
         ),
       ],
       child: const AppRouter(),
     );
+  }
+
+  Stream<AppUser?> _createUserStream(BuildContext context) async* {
+    final authService = context.read<AuthService>();
+    final guestService = context.read<GuestService>();
+    
+    // Get initial guest user (in case there's no auth)
+    final initialGuest = await guestService.getGuestUser();
+    
+    // Listen to auth state changes
+    await for (final authUser in authService.user) {
+      if (authUser != null) {
+        // Authenticated user - yield them
+        yield authUser;
+      } else {
+        // No authenticated user - use guest
+        yield initialGuest;
+      }
+    }
   }
 }
 
@@ -59,11 +86,11 @@ class AppRouter extends StatelessWidget {
     final GoRouter _router = GoRouter(
       initialLocation: '/',
       redirect: (context, state) {
-        final isLoggedIn = authState != null;
         final isLoggingIn = state.uri.toString() == '/login';
         
-        if (!isLoggedIn && !isLoggingIn) return '/login';
-        if (isLoggedIn && isLoggingIn) return '/';
+        // Allow access if user exists (authenticated or guest) or if on login page
+        if (authState == null && !isLoggingIn) return '/login';
+        if (authState != null && isLoggingIn && !authState.isGuest) return '/';
         
         return null;
       },
