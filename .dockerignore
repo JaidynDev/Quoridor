@@ -1,0 +1,11 @@
+.git
+.gitignore
+.metadata
+android/
+ios/
+build/
+.dart_tool/
+.idea/
+*.iml
+.vscode/
+test/
