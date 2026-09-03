@@ -134,6 +134,12 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             OutlinedButton.icon(
+              onPressed: () => context.push('/preview'),
+              icon: const Icon(Icons.view_in_ar),
+              label: const Text("Board Preview"),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
               onPressed: () => context.push('/friends'),
               icon: const Icon(Icons.people),
               label: const Text("Friends"),
