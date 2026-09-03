@@ -1,0 +1,42 @@
+name: Deploy GitHub Pages
+
+# Publishes the Flutter web build to the gh-pages branch.
+# GitHub Pages is currently pointed at main (the README). After this
+# workflow succeeds, switch Settings → Pages → Branch to `gh-pages`
+# and the site is https://jaidyndev.github.io/Quoridor/preview
+on:
+  push:
+    branches:
+      - cursor/improve-3d-board-visuals-99a5
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build web
+        run: flutter build web --release --base-href /Quoridor/
+
+      - name: SPA fallback
+        run: cp build/web/index.html build/web/404.html
+
+      - name: Publish gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build/web
+          force_orphan: true
