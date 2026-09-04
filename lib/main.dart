@@ -12,6 +12,7 @@ import 'screens/home/home_screen.dart';
 import 'screens/lobby/lobby_screen.dart';
 import 'screens/friends/friends_screen.dart';
 import 'screens/game/game_screen.dart';
+import 'screens/game/board_preview_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -86,10 +87,12 @@ class AppRouter extends StatelessWidget {
     final GoRouter _router = GoRouter(
       initialLocation: '/',
       redirect: (context, state) {
-        final isLoggingIn = state.uri.toString() == '/login';
-        
-        // Allow access if user exists (authenticated or guest) or if on login page
-        if (authState == null && !isLoggingIn) return '/login';
+        final path = state.uri.path;
+        final isLoggingIn = path == '/login';
+        final isPreview = path == '/preview';
+
+        // Allow access if user exists (authenticated or guest) or if on login/preview
+        if (authState == null && !isLoggingIn && !isPreview) return '/login';
         if (authState != null && isLoggingIn && !authState.isGuest) return '/';
         
         return null;
@@ -110,6 +113,10 @@ class AppRouter extends StatelessWidget {
         GoRoute(
           path: '/friends',
           builder: (context, state) => const FriendsScreen(),
+        ),
+        GoRoute(
+          path: '/preview',
+          builder: (context, state) => const BoardPreviewScreen(),
         ),
         GoRoute(
           path: '/game/:id',

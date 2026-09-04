@@ -56,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Text('Quoridor'),
             const SizedBox(width: 8),
             Text(
-              'v1.0.9',
+              'v1.1.0',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -131,6 +131,12 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () => context.push('/lobby'),
               icon: const Icon(Icons.play_arrow),
               label: const Text("Play Game"),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () => context.push('/preview'),
+              icon: const Icon(Icons.view_in_ar),
+              label: const Text("Board Preview"),
             ),
             const SizedBox(height: 16),
             OutlinedButton.icon(
