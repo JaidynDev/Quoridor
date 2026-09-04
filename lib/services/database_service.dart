@@ -172,7 +172,7 @@ class DatabaseService {
     if (userId.startsWith('guest_')) {
       // For guest users, fetch from local storage
       final prefs = await SharedPreferences.getInstance();
-      final username = prefs.getString('guest_username') ?? 'Guest${userId.substring(0, 12)}';
+      final username = prefs.getString('guest_username') ?? 'Guest';
       final photoUrl = prefs.getString('guest_photo_url');
       
       yield AppUser(
@@ -290,7 +290,7 @@ class DatabaseService {
     if (guestIds.isNotEmpty) {
       final prefs = await SharedPreferences.getInstance();
       for (final guestId in guestIds) {
-        final username = prefs.getString('guest_username') ?? 'Guest${guestId.substring(0, 12)}';
+        final username = prefs.getString('guest_username') ?? 'Guest';
         final photoUrl = prefs.getString('guest_photo_url');
         users.add(AppUser(
           id: guestId,

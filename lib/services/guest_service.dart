@@ -22,6 +22,10 @@ class GuestService {
     
     // Get or create guest username
     String username = prefs.getString(_guestUsernameKey) ?? 'Guest';
+    if (username.startsWith('Guestguest')) {
+      username = 'Guest';
+      await prefs.setString(_guestUsernameKey, username);
+    }
     
     // Get guest photo URL (optional, can be null)
     String? photoUrl = prefs.getString(_guestPhotoUrlKey);
