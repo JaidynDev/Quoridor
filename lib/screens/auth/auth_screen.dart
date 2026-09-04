@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/auth_service.dart';
-import '../../services/guest_service.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -54,6 +53,7 @@ class _AuthScreenState extends State<AuthScreen> {
           _selectedAvatar
         );
       }
+      if (mounted) context.go('/');
     } catch (e) {
       setState(() => _errorMessage = e.toString());
     } finally {
@@ -157,6 +157,12 @@ class _AuthScreenState extends State<AuthScreen> {
                         child: const Text('Play as Guest'),
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Guests can play now. Sign in to keep friends and send invites.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                      textAlign: TextAlign.center,
+                    ),
                   ],
                 ),
               ),
@@ -175,12 +181,9 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      final guestService = context.read<GuestService>();
-      await guestService.getGuestUser(); // This will create/retrieve guest user
-      // The StreamProvider will pick up the guest user and navigate automatically
-      if (mounted) {
-        context.go('/');
-      }
+      final auth = context.read<AuthService>();
+      await auth.playAsGuest();
+      if (mounted) context.go('/');
     } catch (e) {
       setState(() => _errorMessage = e.toString());
     } finally {

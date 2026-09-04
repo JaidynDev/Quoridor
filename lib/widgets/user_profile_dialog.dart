@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/user_model.dart';
 import '../services/database_service.dart';
+import 'game_invite.dart';
 
 class UserProfileDialog extends StatelessWidget {
   final String userId;
@@ -162,16 +163,11 @@ class UserProfileDialog extends StatelessWidget {
                       // Invite Button (Placeholder for now, could link to create game)
                       // Only if online or friend?
                       ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          // TODO: Initiate Game with specific user
-                          // For now, just close, or maybe navigate to lobby with pre-fill?
-                          // Simple v1: Go to lobby
-                          // context.push('/lobby');
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("Invitation feature coming soon! Create a game and share code."))
-                          );
-                        },
+                        onPressed: () => inviteFriendToGame(
+                          context,
+                          hostId: currentUserId,
+                          invitee: user,
+                        ),
                         icon: const Icon(Icons.gamepad),
                         label: const Text("Invite"),
                       ),

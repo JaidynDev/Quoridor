@@ -22,6 +22,7 @@ class GameSettings {
 class GameModel {
   final String id;
   final String hostId;
+  final String? invitedUserId;
   final List<String> playerIds; // UIDs
   final String status; // 'waiting', 'playing', 'finished'
   final GameSettings settings;
@@ -35,6 +36,7 @@ class GameModel {
   GameModel({
     required this.id,
     required this.hostId,
+    this.invitedUserId,
     required this.playerIds,
     required this.status,
     required this.settings,
@@ -48,6 +50,7 @@ class GameModel {
   Map<String, dynamic> toMap() {
     return {
       'hostId': hostId,
+      if (invitedUserId != null) 'invitedUserId': invitedUserId,
       'playerIds': playerIds,
       'status': status,
       'settings': settings.toMap(),
@@ -63,6 +66,7 @@ class GameModel {
     return GameModel(
       id: id,
       hostId: map['hostId'] ?? '',
+      invitedUserId: map['invitedUserId'],
       playerIds: List<String>.from(map['playerIds'] ?? []),
       status: map['status'] ?? 'waiting',
       settings: GameSettings.fromMap(map['settings'] ?? {}),

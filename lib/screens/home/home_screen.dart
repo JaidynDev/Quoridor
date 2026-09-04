@@ -58,7 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Text('Quoridor'),
             const SizedBox(width: 8),
             Text(
-              'v1.1.0',
+              'v1.1.1',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -128,6 +128,15 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text("Hello, ${user?.username ?? 'Guest'}!"),
+            if (user?.isGuest == true)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Playing as a guest. Sign in to keep friends, stats, and invites.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+              ),
             const SizedBox(height: 32),
             FilledButton.icon(
               onPressed: () => context.push('/lobby'),
@@ -147,10 +156,30 @@ class _HomeScreenState extends State<HomeScreen> {
               label: const Text("Friends"),
             ),
             const SizedBox(height: 16),
-            OutlinedButton(
-              onPressed: () => context.read<AuthService>().signOut(),
-              child: const Text("Sign Out"),
-            ),
+            if (user != null && !user.isGuest)
+              OutlinedButton(
+                onPressed: () async {
+                  await context.read<AuthService>().signOut();
+                  if (context.mounted) context.go('/login');
+                },
+                child: const Text("Sign Out"),
+              )
+            else ...[
+              FilledButton.tonal(
+                onPressed: () => context.go('/login'),
+                child: const Text("Sign In"),
+              ),
+              if (user?.isGuest == true) ...[
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () async {
+                    await context.read<AuthService>().signOut();
+                    if (context.mounted) context.go('/login');
+                  },
+                  child: const Text("Sign Out"),
+                ),
+              ],
+            ],
           ],
         ),
       ),

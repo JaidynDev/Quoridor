@@ -6,11 +6,16 @@ import '../models/user_model.dart';
 class DatabaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  Future<String> createGame(String hostId, GameSettings settings) async {
+  Future<String> createGame(
+    String hostId,
+    GameSettings settings, {
+    String? invitedUserId,
+  }) async {
     final docRef = _firestore.collection('games').doc();
     final game = GameModel(
       id: docRef.id,
       hostId: hostId,
+      invitedUserId: invitedUserId,
       playerIds: [hostId],
       status: 'waiting',
       settings: settings,
@@ -44,6 +49,23 @@ class DatabaseService {
         'playerIds': FieldValue.arrayUnion([userId]),
         'status': 'playing', // Start immediately when 2nd player joins for 2p
       });
+    });
+  }
+
+  Stream<List<GameModel>> streamIncomingInvites(String userId) {
+    return _firestore
+        .collection('games')
+        .where('invitedUserId', isEqualTo: userId)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => GameModel.fromMap(d.data(), d.id))
+            .where((g) => g.status == 'waiting')
+            .toList());
+  }
+
+  Future<void> declineGameInvite(String gameId) async {
+    await _firestore.collection('games').doc(gameId).update({
+      'invitedUserId': FieldValue.delete(),
     });
   }
 
@@ -172,6 +194,9 @@ class DatabaseService {
 
   Future<void> sendFriendRequest(String currentUserId, String targetUserId) async {
     if (currentUserId == targetUserId) return;
+    if (currentUserId.startsWith('guest_')) {
+      throw Exception('Sign in to send friend requests.');
+    }
     
     // Check if already friends or requested
     final targetUserRef = _firestore.collection('users').doc(targetUserId);
@@ -354,6 +379,9 @@ class DatabaseService {
         .limit(20)
         .get();
         
-    return snapshot.docs.map((doc) => AppUser.fromMap(doc.data(), doc.id)).toList();
+    return snapshot.docs
+        .map((doc) => AppUser.fromMap(doc.data(), doc.id))
+        .where((user) => !user.isGuest)
+        .toList();
   }
 }
