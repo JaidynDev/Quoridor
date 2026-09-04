@@ -425,11 +425,17 @@ class _Avatar extends StatelessWidget {
 
     return CircleAvatar(
       radius: radius,
-      backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
-      foregroundColor: Theme.of(context).colorScheme.onTertiaryContainer,
+      backgroundColor: AppPalette.slate,
+      foregroundColor: Colors.white,
       backgroundImage: user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
       child: user.photoUrl == null
-          ? Text(initial, style: TextStyle(fontSize: radius * 0.8))
+          ? Text(
+              initial,
+              style: TextStyle(
+                fontSize: radius * 0.8,
+                fontWeight: FontWeight.w600,
+              ),
+            )
           : null,
     );
   }
