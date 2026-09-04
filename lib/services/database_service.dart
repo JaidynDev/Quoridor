@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/game_model.dart';
+import '../models/quoridor_logic.dart';
 import '../models/user_model.dart';
 
 class DatabaseService {
@@ -19,14 +20,7 @@ class DatabaseService {
       playerIds: [hostId],
       status: 'waiting',
       settings: settings,
-      gameState: {
-        // Initial Quoridor state
-        'p1': {'x': 4, 'y': 0}, // Top (or bottom) center
-        'p2': {'x': 4, 'y': 8}, // Bottom (or top) center
-        'p1WallsLeft': 10,
-        'p2WallsLeft': 10,
-        'walls': [], // List of {x, y, orientation, owner}
-      },
+      gameState: QuoridorLogic.initialState(settings.seats),
     );
     await docRef.set(game.toMap());
     return docRef.id;
@@ -43,11 +37,14 @@ class DatabaseService {
       
       if (game.status != 'waiting') throw Exception("Game already started");
       if (game.playerIds.contains(userId)) return; // Already joined
-      if (game.playerIds.length >= 2) throw Exception("Game is full");
+      if (game.playerIds.length >= game.settings.seats) {
+        throw Exception("Game is full");
+      }
 
+      final nextIds = [...game.playerIds, userId];
       transaction.update(docRef, {
         'playerIds': FieldValue.arrayUnion([userId]),
-        'status': 'playing', // Start immediately when 2nd player joins for 2p
+        'status': nextIds.length >= game.settings.seats ? 'playing' : 'waiting',
       });
     });
   }
@@ -112,24 +109,20 @@ class DatabaseService {
       final gameSnapshot = await gameRef.get();
       final gameData = gameSnapshot.data()!;
       final playerIds = List<String>.from(gameData['playerIds']);
-      
-      String? loserId;
-      if (playerIds.contains(winnerId)) {
-        loserId = playerIds.firstWhere((id) => id != winnerId, orElse: () => '');
-      }
 
-      // Update Winner Stats
       await _firestore.collection('users').doc(winnerId).set({
         'wins': FieldValue.increment(1),
       }, SetOptions(merge: true)).catchError((e) => print("Error updating winner stats: $e"));
 
-      // Update Loser Stats (Only if permissions allow, otherwise this might fail silently on client)
-      if (loserId != null && loserId.isNotEmpty) {
+      final losers = playerIds.where((id) => id != winnerId).toList();
+      for (final loserId in losers) {
         await _firestore.collection('users').doc(loserId).set({
           'losses': FieldValue.increment(1),
         }, SetOptions(merge: true)).catchError((e) => print("Error updating loser stats: $e"));
+      }
 
-        // Update Series Stats (Shared document, usually allowed if public/shared)
+      if (losers.length == 1) {
+        final loserId = losers.first;
         final p1 = winnerId.compareTo(loserId) < 0 ? winnerId : loserId;
         final p2 = winnerId.compareTo(loserId) < 0 ? loserId : winnerId;
         final seriesId = '${p1}_${p2}';
@@ -345,18 +338,14 @@ class DatabaseService {
       bool allRequested = playerIds.isNotEmpty && playerIds.every((id) => rematchRequests.contains(id));
       
       if (allRequested) {
-        // Reset Game
+        final settings = GameSettings.fromMap(
+          Map<String, dynamic>.from(data['settings'] ?? {}),
+        );
         transaction.update(gameRef, {
           'status': 'playing',
           'winnerId': null,
           'currentTurnIndex': 0,
-          'gameState': {
-            'p1': {'x': 4, 'y': 0},
-            'p2': {'x': 4, 'y': 8},
-            'walls': [],
-            'p1WallsLeft': 10,
-            'p2WallsLeft': 10,
-          },
+          'gameState': QuoridorLogic.initialState(settings.seats),
           'rematchRequests': [],
           'moveLog': [],
         });

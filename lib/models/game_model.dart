@@ -1,6 +1,7 @@
 class GameSettings {
   final int timeLimitSeconds; // 0 for no limit
   final bool isPrivate;
+  final int playerCount;
 
   /// Optional label so players can tell one match from another.
   final String? name;
@@ -8,21 +9,27 @@ class GameSettings {
   GameSettings({
     this.timeLimitSeconds = 60,
     this.isPrivate = false,
+    this.playerCount = 2,
     this.name,
   });
+
+  int get seats => playerCount == 4 ? 4 : 2;
 
   Map<String, dynamic> toMap() {
     return {
       'timeLimitSeconds': timeLimitSeconds,
       'isPrivate': isPrivate,
+      'playerCount': seats,
       if (name != null) 'name': name,
     };
   }
 
   factory GameSettings.fromMap(Map<String, dynamic> map) {
+    final raw = map['playerCount'] ?? 2;
     return GameSettings(
       timeLimitSeconds: map['timeLimitSeconds'] ?? 60,
       isPrivate: map['isPrivate'] ?? false,
+      playerCount: raw == 4 ? 4 : 2,
       name: map['name'],
     );
   }
@@ -34,6 +41,8 @@ class GameSettings {
     if (timeLimitSeconds % 60 == 0) return '${timeLimitSeconds ~/ 60} min per move';
     return '${timeLimitSeconds}s per move';
   }
+
+  String get seatsLabel => seats == 4 ? '4 players' : '2 players';
 }
 
 class GameModel {
@@ -44,7 +53,7 @@ class GameModel {
   final String status; // 'waiting', 'playing', 'finished'
   final GameSettings settings;
   final String? winnerId;
-  final int currentTurnIndex; // 0 or 1
+  final int currentTurnIndex;
   // Game State
   final Map<String, dynamic> gameState; 
   final List<Map<String, dynamic>> moveLog;

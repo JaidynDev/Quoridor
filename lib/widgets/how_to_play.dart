@@ -26,8 +26,8 @@ class HowToPlaySheet extends StatelessWidget {
     ),
     (
       Icons.fence_outlined,
-      'Ten walls each',
-      'A wall spans two squares and blocks movement through it. Spend them to slow your rival down.',
+      'Walls are the real weapon',
+      'A wall spans two squares. You get ten in a duel, five each when four play.',
     ),
     (
       Icons.route_outlined,
@@ -35,9 +35,14 @@ class HowToPlaySheet extends StatelessWidget {
       'You can slow a player down, but a wall is illegal if it leaves them no path at all to their goal.',
     ),
     (
+      Icons.groups_outlined,
+      'Two or four',
+      'In a four-player match you sit on all four sides. First pawn to the far side still wins.',
+    ),
+    (
       Icons.keyboard_double_arrow_up,
       'Hop the standoff',
-      'When the two pawns end up face to face, you may jump straight over your opponent.',
+      'When pawns meet face to face, jump straight over — or step diagonal if that landing is blocked.',
     ),
   ];
 

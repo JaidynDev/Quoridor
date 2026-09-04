@@ -85,8 +85,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Two players, one board. Host a table and pass the code '
-                    'around, or drop into a game someone already opened.',
+                    'Two players, one board — or four around the table. Host a match '
+                    'and pass the code around, or drop into a game someone already opened.',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: AppPalette.inkSoft,
                       height: 1.45,
@@ -223,6 +223,7 @@ class _CreateGameDialogState extends State<CreateGameDialog> {
   final _nameController = TextEditingController();
   int _timeLimit = 60;
   bool _isPrivate = false;
+  int _playerCount = 2;
 
   static const _clocks = [
     (30, '30 seconds', 'Blitz. Move fast or lose the turn.'),
@@ -265,6 +266,37 @@ class _CreateGameDialogState extends State<CreateGameDialog> {
                     ?.copyWith(color: AppPalette.inkSoft),
               ),
               const SizedBox(height: 20),
+              Text('Players', style: theme.textTheme.titleSmall),
+              const SizedBox(height: 8),
+              RadioGroup<int>(
+                groupValue: _playerCount,
+                onChanged: (v) => setState(() => _playerCount = v!),
+                child: Column(
+                  children: [
+                    RadioListTile<int>(
+                      value: 2,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Duel'),
+                      subtitle: Text(
+                        'Two players, ten walls each, opposite sides of the board.',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: AppPalette.inkSoft),
+                      ),
+                    ),
+                    RadioListTile<int>(
+                      value: 4,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Four players'),
+                      subtitle: Text(
+                        'One pawn on each side, five walls each. First to the far side wins.',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: AppPalette.inkSoft),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
               Text('Time per move', style: theme.textTheme.titleSmall),
               const SizedBox(height: 8),
               RadioGroup<int>(
@@ -315,6 +347,7 @@ class _CreateGameDialogState extends State<CreateGameDialog> {
               GameSettings(
                 timeLimitSeconds: _timeLimit,
                 isPrivate: _isPrivate,
+                playerCount: _playerCount,
                 name: name.isEmpty ? null : name,
               ),
             );

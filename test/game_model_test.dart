@@ -30,7 +30,9 @@ void main() {
     expect(unnamed.clockLabel, 'No time limit');
 
     expect(GameSettings(timeLimitSeconds: 30).clockLabel, '30s per move');
-    expect(GameSettings().toMap().containsKey('name'), isFalse);
+    expect(GameSettings(playerCount: 4).seatsLabel, '4 players');
+    expect(GameSettings.fromMap({'playerCount': 4}).seats, 4);
+    expect(GameSettings.fromMap({}).seats, 2);
     expect(
       GameSettings.fromMap(named.toMap()).name,
       'Friday rematch',

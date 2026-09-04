@@ -213,8 +213,8 @@ class _HeroCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 Text(
                   'Race your pawn to the opposite side of the board. '
-                  'Ten walls each to slow your rival down, but you can never '
-                  'block them off completely.',
+                  'Two or four players. Walls to slow a rival down, but you '
+                  'can never block them off completely.',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: Colors.white.withValues(alpha: 0.86),
                     height: 1.45,
