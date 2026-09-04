@@ -37,9 +37,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _updatePresence() {
     final user = context.read<AppUser?>();
-    if (user != null) {
-      context.read<DatabaseService>().updateLastActive(user.id);
-    }
+    if (user == null) return;
+    context
+        .read<DatabaseService>()
+        .updateLastActive(user.id)
+        .catchError((_) {});
   }
 
   @override
