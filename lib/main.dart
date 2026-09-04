@@ -7,6 +7,7 @@ import 'models/user_model.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'services/guest_service.dart';
+import 'theme/app_theme.dart';
 import 'screens/auth/auth_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/lobby/lobby_screen.dart';
@@ -155,10 +156,7 @@ class _AppRouterState extends State<AppRouter> {
 
     return MaterialApp.router(
       title: 'Quoridor',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(),
       routerConfig: _router,
     );
   }

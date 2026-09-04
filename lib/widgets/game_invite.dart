@@ -19,7 +19,7 @@ Future<void> inviteFriendToGame(
   try {
     final gameId = await db.createGame(
       hostId,
-      GameSettings(isPrivate: true),
+      GameSettings(isPrivate: true, name: 'Match with ${invitee.username}'),
       invitedUserId: invitee.id,
     );
     await Clipboard.setData(ClipboardData(text: gameId));

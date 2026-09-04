@@ -20,6 +20,23 @@ void main() {
     expect(copy.hostId, 'host');
   });
 
+  test('match name and clock label describe the game', () {
+    final named = GameSettings(name: 'Friday rematch', timeLimitSeconds: 300);
+    expect(named.displayName, 'Friday rematch');
+    expect(named.clockLabel, '5 min per move');
+
+    final unnamed = GameSettings(timeLimitSeconds: 0);
+    expect(unnamed.displayName, 'Quoridor match');
+    expect(unnamed.clockLabel, 'No time limit');
+
+    expect(GameSettings(timeLimitSeconds: 30).clockLabel, '30s per move');
+    expect(GameSettings().toMap().containsKey('name'), isFalse);
+    expect(
+      GameSettings.fromMap(named.toMap()).name,
+      'Friday rematch',
+    );
+  });
+
   test('omits invitedUserId when the game is open', () {
     final game = GameModel(
       id: 'open',

@@ -60,15 +60,27 @@ class _GameScreenContent extends StatelessWidget {
              
              return Scaffold(
               appBar: AppBar(
-                title: Text('Game: ${game.id.substring(0, 4)}...'),
+                title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(game.settings.displayName),
+                    Text(
+                      game.settings.clockLabel,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
                 actions: [
                   IconButton(
+                    tooltip: 'Share code',
                     icon: const Icon(Icons.share),
                     onPressed: () {
                       Share.share('Join my Quoridor game! Code: ${game.id}');
                     },
                   ),
                   IconButton(
+                    tooltip: 'Copy code',
                     icon: const Icon(Icons.copy),
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: game.id));

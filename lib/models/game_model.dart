@@ -2,12 +2,20 @@ class GameSettings {
   final int timeLimitSeconds; // 0 for no limit
   final bool isPrivate;
 
-  GameSettings({this.timeLimitSeconds = 60, this.isPrivate = false});
+  /// Optional label so players can tell one match from another.
+  final String? name;
+
+  GameSettings({
+    this.timeLimitSeconds = 60,
+    this.isPrivate = false,
+    this.name,
+  });
 
   Map<String, dynamic> toMap() {
     return {
       'timeLimitSeconds': timeLimitSeconds,
       'isPrivate': isPrivate,
+      if (name != null) 'name': name,
     };
   }
 
@@ -15,7 +23,16 @@ class GameSettings {
     return GameSettings(
       timeLimitSeconds: map['timeLimitSeconds'] ?? 60,
       isPrivate: map['isPrivate'] ?? false,
+      name: map['name'],
     );
+  }
+
+  String get displayName => name?.isNotEmpty == true ? name! : 'Quoridor match';
+
+  String get clockLabel {
+    if (timeLimitSeconds == 0) return 'No time limit';
+    if (timeLimitSeconds % 60 == 0) return '${timeLimitSeconds ~/ 60} min per move';
+    return '${timeLimitSeconds}s per move';
   }
 }
 

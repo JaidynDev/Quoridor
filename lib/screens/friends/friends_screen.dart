@@ -273,7 +273,7 @@ class _GameInviteTile extends StatelessWidget {
         return ListTile(
           leading: const Icon(Icons.sports_esports),
           title: Text('$hostName invited you to play'),
-          subtitle: Text('Code: ${game.id}'),
+          subtitle: Text('${game.settings.displayName} · ${game.settings.clockLabel}'),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
