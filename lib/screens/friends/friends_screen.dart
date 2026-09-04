@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import '../../screens/auth/auth_screen.dart';
 import '../../models/game_model.dart';
 import '../../models/user_model.dart';
 import '../../services/database_service.dart';
@@ -30,7 +31,7 @@ class FriendsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 FilledButton(
-                  onPressed: () => context.go('/login'),
+                  onPressed: () => AuthScreen.show(context),
                   child: const Text('Sign In'),
                 ),
               ],

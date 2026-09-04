@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/user_model.dart';
+import '../screens/auth/auth_screen.dart';
+import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import 'game_invite.dart';
 
@@ -15,6 +17,12 @@ class UserProfileDialog extends StatelessWidget {
   });
 
   static void show(BuildContext context, String userId, String currentUserId) {
+    final me = context.read<AppUser?>();
+    if (me != null && me.isGuest && userId == currentUserId) {
+      AuthScreen.show(context);
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (context) => UserProfileDialog(userId: userId, currentUserId: currentUserId),
@@ -106,7 +114,18 @@ class UserProfileDialog extends StatelessWidget {
                 const SizedBox(height: 24),
                 
                 // Actions
-                if (userId != currentUserId)
+                if (userId == currentUserId && !user.isGuest)
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        await context.read<AuthService>().signOut();
+                      },
+                      child: const Text('Sign Out'),
+                    ),
+                  )
+                else if (userId != currentUserId)
                   Wrap(
                     spacing: 8,
                     children: [

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../models/user_model.dart';
-import '../../services/auth_service.dart';
 import '../../services/database_service.dart';
 import '../../widgets/user_profile_dialog.dart';
 
@@ -117,7 +116,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () => UserProfileDialog.show(context, user.id, user.id),
                 child: CircleAvatar(
                   backgroundImage: user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
-                  child: user.photoUrl == null ? Text(user.username[0].toUpperCase()) : null,
+                  child: user.photoUrl == null
+                      ? Text((user.username.isNotEmpty ? user.username[0] : 'G').toUpperCase())
+                      : null,
                 ),
               ),
             ),
@@ -132,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'Playing as a guest. Sign in to keep friends, stats, and invites.',
+                  'Playing as a guest. Tap your profile to sign in and keep friends, stats, and invites.',
                   style: Theme.of(context).textTheme.bodySmall,
                   textAlign: TextAlign.center,
                 ),
@@ -155,31 +156,6 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: const Icon(Icons.people),
               label: const Text("Friends"),
             ),
-            const SizedBox(height: 16),
-            if (user != null && !user.isGuest)
-              OutlinedButton(
-                onPressed: () async {
-                  await context.read<AuthService>().signOut();
-                  if (context.mounted) context.go('/login');
-                },
-                child: const Text("Sign Out"),
-              )
-            else ...[
-              FilledButton.tonal(
-                onPressed: () => context.go('/login'),
-                child: const Text("Sign In"),
-              ),
-              if (user?.isGuest == true) ...[
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () async {
-                    await context.read<AuthService>().signOut();
-                    if (context.mounted) context.go('/login');
-                  },
-                  child: const Text("Sign Out"),
-                ),
-              ],
-            ],
           ],
         ),
       ),

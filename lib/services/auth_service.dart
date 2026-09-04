@@ -20,6 +20,7 @@ class AuthService {
   final _firstEvent = Completer<void>();
   StreamSubscription<User?>? _authSub;
   bool _listening = false;
+  bool _autoGuestBusy = false;
   AppUser? _current;
 
   /// True when Play as Guest fell back to a device-local id because
@@ -46,9 +47,26 @@ class AuthService {
     _listening = true;
     _authSub = _auth.authStateChanges().listen((firebaseUser) async {
       try {
+        if (firebaseUser == null) {
+          if (_localGuestActive && _current != null) return;
+          if (_autoGuestBusy) return;
+          _autoGuestBusy = true;
+          try {
+            await playAsGuest();
+          } finally {
+            _autoGuestBusy = false;
+          }
+          return;
+        }
         _emit(await _mapFirebaseUser(firebaseUser));
       } catch (_) {
-        if (!_localGuestActive) _emit(null);
+        if (!_localGuestActive) {
+          try {
+            await playAsGuest();
+          } catch (_) {
+            _emit(null);
+          }
+        }
       }
     });
   }
@@ -163,13 +181,15 @@ class AuthService {
     }
   }
 
-  /// Leaves the current session. Does not start a new guest automatically.
+  /// Leaves an account session and continues as a guest.
   Future<void> signOut() async {
     _localGuestActive = false;
     await _guestService?.clearGuestData();
-    _emit(null);
     if (_auth.currentUser != null) {
       await _auth.signOut();
+    }
+    if (_auth.currentUser == null && !(_current?.isGuest == true)) {
+      await playAsGuest();
     }
   }
 

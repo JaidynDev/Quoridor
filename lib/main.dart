@@ -90,7 +90,7 @@ class _AppRouterState extends State<AppRouter> {
   void initState() {
     super.initState();
     _router = GoRouter(
-      initialLocation: '/login',
+      initialLocation: '/',
       refreshListenable: _authRefresh,
       redirect: (context, state) {
         final authState = _authRefresh.user;
@@ -100,9 +100,7 @@ class _AppRouterState extends State<AppRouter> {
 
         if (!_authRefresh.ready) return null;
         if (isPreview) return null;
-        if (authState == null && !isLoggingIn) return '/login';
-        // Signed-in accounts leave the login screen. Guests may stay there
-        // to create an account.
+        // Guests land on home. Accounts leave the sign-in screen.
         if (authState != null && !authState.isGuest && isLoggingIn) return '/';
 
         return null;
