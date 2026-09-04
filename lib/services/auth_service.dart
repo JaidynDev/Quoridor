@@ -14,7 +14,18 @@ class AuthService {
 
   Stream<AppUser?> get user {
     return _auth.authStateChanges().asyncMap((User? user) async {
-      if (user == null) return null;
+      if (user == null) {
+        // Guests still need a Firebase Auth session so Firestore rules that
+        // check request.auth can succeed. Fall back to a local-only guest if
+        // Anonymous sign-in is disabled on the project.
+        try {
+          await _auth.signInAnonymously();
+        } catch (_) {}
+        return null;
+      }
+      if (user.isAnonymous) {
+        return _guestFromAuth(user);
+      }
       final doc = await _firestore.collection('users').doc(user.uid).get();
       if (doc.exists) {
         return AppUser.fromMap(doc.data()!, user.uid);
@@ -22,6 +33,35 @@ class AuthService {
       // Fallback if user exists in Auth but not Firestore (shouldn't happen in normal flow)
       return AppUser(id: user.uid, email: user.email ?? '', username: 'User');
     });
+  }
+
+  Future<AppUser> _guestFromAuth(User user) async {
+    final guest = await (_guestService?.getGuestUser() ??
+        Future.value(AppUser(
+          id: user.uid,
+          email: '',
+          username: 'Guest',
+          isGuest: true,
+        )));
+    final profile = AppUser(
+      id: user.uid,
+      email: '',
+      username: guest.username,
+      photoUrl: guest.photoUrl,
+      isGuest: true,
+    );
+    try {
+      await _firestore.collection('users').doc(user.uid).set(
+        {
+          'email': '',
+          'username': profile.username,
+          'photoUrl': profile.photoUrl,
+          'isGuest': true,
+        },
+        SetOptions(merge: true),
+      );
+    } catch (_) {}
+    return profile;
   }
 
   /// Get current authenticated user or null
