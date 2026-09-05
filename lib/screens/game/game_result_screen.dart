@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../models/game_model.dart';
+import '../../models/quoridor_logic.dart';
 import '../../models/user_model.dart';
 import '../../services/database_service.dart';
 import '../../theme/app_theme.dart';
@@ -147,9 +148,9 @@ class GameResultPanel extends StatelessWidget {
                   builder: (context, constraints) {
                     final seats = game.playerIds.length;
                     const gap = 12.0;
-                    final columns = seats <= 2
-                        ? seats.clamp(1, 2)
-                        : (constraints.maxWidth >= 680 ? 4 : 2);
+                    final columns = constraints.maxWidth >= 680
+                        ? seats.clamp(1, 4)
+                        : (seats <= 2 ? seats.clamp(1, 2) : 2);
                     final width = seats == 0
                         ? constraints.maxWidth
                         : (constraints.maxWidth - gap * (columns - 1)) /
@@ -231,7 +232,6 @@ class GameResultPanel extends StatelessWidget {
 }
 
 class _PlayerResultCard extends StatelessWidget {
-  static const _sides4 = ['South', 'East', 'North', 'West'];
 
   final GameModel game;
   final int seatIndex;
@@ -257,10 +257,7 @@ class _PlayerResultCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final won = game.winnerId == playerId;
     final color = kPawnColors[seatIndex % kPawnColors.length];
-    final seats = game.playerIds.length;
-    final side = seats == 4
-        ? _sides4[seatIndex % 4]
-        : (seatIndex == 0 ? 'South' : 'North');
+    final side = QuoridorLogic.sideLabel(seatIndex, game.settings.seats);
     final name = afterActionPlayerName(user?.username, isYou: isYou);
     final sessionW = game.sessionWinsFor(playerId);
     final sessionL = game.sessionLossesFor(playerId);

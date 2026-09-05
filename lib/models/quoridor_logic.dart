@@ -38,6 +38,7 @@ class PlayerSeat {
   final Position start;
   final bool goalIsY;
   final int goalValue;
+  final String side;
 
   /// Quarter-turns so this player's own edge sits nearest the camera.
   final int cameraRotation;
@@ -46,6 +47,7 @@ class PlayerSeat {
     required this.start,
     required this.goalIsY,
     required this.goalValue,
+    required this.side,
     required this.cameraRotation,
   });
 
@@ -57,22 +59,85 @@ class QuoridorLogic {
   static const int boardSize = 9;
 
   static const List<PlayerSeat> twoPlayerSeats = [
-    PlayerSeat(start: Position(4, 0), goalIsY: true, goalValue: 8, cameraRotation: 0),
-    PlayerSeat(start: Position(4, 8), goalIsY: true, goalValue: 0, cameraRotation: 2),
+    PlayerSeat(
+      start: Position(4, 0),
+      goalIsY: true,
+      goalValue: 8,
+      side: 'South',
+      cameraRotation: 0,
+    ),
+    PlayerSeat(
+      start: Position(4, 8),
+      goalIsY: true,
+      goalValue: 0,
+      side: 'North',
+      cameraRotation: 2,
+    ),
   ];
 
   /// South, east, north, west — clockwise around the table.
   static const List<PlayerSeat> fourPlayerSeats = [
-    PlayerSeat(start: Position(4, 0), goalIsY: true, goalValue: 8, cameraRotation: 0),
-    PlayerSeat(start: Position(8, 4), goalIsY: false, goalValue: 0, cameraRotation: 1),
-    PlayerSeat(start: Position(4, 8), goalIsY: true, goalValue: 0, cameraRotation: 2),
-    PlayerSeat(start: Position(0, 4), goalIsY: false, goalValue: 8, cameraRotation: 3),
+    PlayerSeat(
+      start: Position(4, 0),
+      goalIsY: true,
+      goalValue: 8,
+      side: 'South',
+      cameraRotation: 0,
+    ),
+    PlayerSeat(
+      start: Position(8, 4),
+      goalIsY: false,
+      goalValue: 0,
+      side: 'East',
+      cameraRotation: 1,
+    ),
+    PlayerSeat(
+      start: Position(4, 8),
+      goalIsY: true,
+      goalValue: 0,
+      side: 'North',
+      cameraRotation: 2,
+    ),
+    PlayerSeat(
+      start: Position(0, 4),
+      goalIsY: false,
+      goalValue: 8,
+      side: 'West',
+      cameraRotation: 3,
+    ),
   ];
 
-  static List<PlayerSeat> seatsFor(int playerCount) =>
-      playerCount == 4 ? fourPlayerSeats : twoPlayerSeats;
+  /// South, east, north — west stays empty, matching the usual 3-player layout.
+  static List<PlayerSeat> get threePlayerSeats =>
+      fourPlayerSeats.sublist(0, 3);
 
-  static int wallsEach(int playerCount) => playerCount == 4 ? 5 : 10;
+  static List<PlayerSeat> seatsFor(int playerCount) {
+    switch (playerCount) {
+      case 4:
+        return fourPlayerSeats;
+      case 3:
+        return threePlayerSeats;
+      default:
+        return twoPlayerSeats;
+    }
+  }
+
+  static int wallsEach(int playerCount) {
+    switch (playerCount) {
+      case 4:
+        return 5;
+      case 3:
+        return 6;
+      default:
+        return 10;
+    }
+  }
+
+  static String sideLabel(int seatIndex, int playerCount) {
+    final seats = seatsFor(playerCount);
+    if (seatIndex < 0 || seatIndex >= seats.length) return 'Seat';
+    return seats[seatIndex].side;
+  }
 
   static String pawnKey(int index) => 'p${index + 1}';
   static String wallsKey(int index) => 'p${index + 1}WallsLeft';
@@ -93,7 +158,8 @@ class QuoridorLogic {
     if (raw is Map) {
       return Position.fromMap(Map<String, dynamic>.from(raw));
     }
-    return seatsFor(index >= 4 ? 4 : 2)[index.clamp(0, 1)].start;
+    final seats = seatsFor(index >= 3 ? 4 : (index >= 2 ? 3 : 2));
+    return seats[index.clamp(0, seats.length - 1)].start;
   }
 
   static List<Position> pawnsFromState(Map<String, dynamic> state, int playerCount) {

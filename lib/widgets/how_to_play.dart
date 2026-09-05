@@ -27,7 +27,7 @@ class HowToPlaySheet extends StatelessWidget {
     (
       Icons.fence_outlined,
       'Walls are the real weapon',
-      'A wall spans two squares. You get ten in a duel, five each when four play.',
+      'A wall spans two squares. You get ten in a duel, six with three players, five when four play.',
     ),
     (
       Icons.route_outlined,
@@ -36,8 +36,8 @@ class HowToPlaySheet extends StatelessWidget {
     ),
     (
       Icons.groups_outlined,
-      'Two or four',
-      'In a four-player match you sit on all four sides. First pawn to the far side still wins.',
+      'Two, three or four',
+      'Three players sit south, east and north, with west empty. Four fill every side. First pawn to the far side still wins.',
     ),
     (
       Icons.keyboard_double_arrow_up,
@@ -64,7 +64,7 @@ class HowToPlaySheet extends StatelessWidget {
               Text('How to play Quoridor', style: theme.textTheme.headlineSmall),
               const SizedBox(height: 8),
               Text(
-                'A two player race across a 9x9 board where the walls are the real weapon.',
+                'A race across a 9x9 board where the walls are the real weapon.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: AppPalette.inkSoft,
                 ),

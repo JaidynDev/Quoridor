@@ -13,7 +13,11 @@ class GameSettings {
     this.name,
   });
 
-  int get seats => playerCount == 4 ? 4 : 2;
+  int get seats {
+    if (playerCount == 4) return 4;
+    if (playerCount == 3) return 3;
+    return 2;
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -26,10 +30,11 @@ class GameSettings {
 
   factory GameSettings.fromMap(Map<String, dynamic> map) {
     final raw = map['playerCount'] ?? 2;
+    final count = raw is int ? raw : int.tryParse('$raw') ?? 2;
     return GameSettings(
       timeLimitSeconds: map['timeLimitSeconds'] ?? 60,
       isPrivate: map['isPrivate'] ?? false,
-      playerCount: raw == 4 ? 4 : 2,
+      playerCount: (count == 3 || count == 4) ? count : 2,
       name: map['name'],
     );
   }
@@ -42,7 +47,16 @@ class GameSettings {
     return '${timeLimitSeconds}s per move';
   }
 
-  String get seatsLabel => seats == 4 ? '4 players' : '2 players';
+  String get seatsLabel {
+    switch (seats) {
+      case 4:
+        return '4 players';
+      case 3:
+        return '3 players';
+      default:
+        return '2 players';
+    }
+  }
 }
 
 class GameModel {

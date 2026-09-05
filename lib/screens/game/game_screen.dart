@@ -129,8 +129,6 @@ class _PlayerStrip extends StatelessWidget {
 
   const _PlayerStrip({required this.game, required this.players});
 
-  static const _sides = ['South', 'East', 'North', 'West'];
-
   @override
   Widget build(BuildContext context) {
     final seats = game.settings.seats;
@@ -146,7 +144,7 @@ class _PlayerStrip extends StatelessWidget {
           for (var i = 0; i < seats; i++)
             _SeatChip(
               index: i,
-              side: seats == 4 ? _sides[i] : (i == 0 ? 'South' : 'North'),
+              side: QuoridorLogic.sideLabel(i, seats),
               user: i < players.length ? players[i] : null,
               walls: game.gameState[QuoridorLogic.wallsKey(i)] ?? defaults,
               isTurn: game.status == 'playing' && game.currentTurnIndex == i,

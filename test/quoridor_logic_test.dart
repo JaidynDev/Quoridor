@@ -12,6 +12,7 @@ void main() {
       expect(state['p1WallsLeft'], 5);
       expect(state['p4WallsLeft'], 5);
       expect(QuoridorLogic.wallsEach(2), 10);
+      expect(QuoridorLogic.wallsEach(3), 6);
     });
 
     test('east player wins on the west edge', () {
@@ -34,6 +35,30 @@ void main() {
         QuoridorLogic.isValidWall(const Wall(3, 3, 1), const [], pawns, seats),
         isTrue,
       );
+    });
+  });
+
+  group('three-player setup', () {
+    test('starts south, east, and north with six walls', () {
+      final state = QuoridorLogic.initialState(3);
+      expect(state['p1'], {'x': 4, 'y': 0});
+      expect(state['p2'], {'x': 8, 'y': 4});
+      expect(state['p3'], {'x': 4, 'y': 8});
+      expect(state.containsKey('p4'), isFalse);
+      expect(state['p1WallsLeft'], 6);
+      expect(state['p3WallsLeft'], 6);
+      expect(
+        QuoridorLogic.seatsFor(3).map((s) => s.side).toList(),
+        ['South', 'East', 'North'],
+      );
+      expect(QuoridorLogic.sideLabel(1, 3), 'East');
+      expect(QuoridorLogic.sideLabel(1, 2), 'North');
+    });
+
+    test('east still wins on the west edge', () {
+      final east = QuoridorLogic.threePlayerSeats[1];
+      expect(east.reachedGoal(const Position(0, 4)), isTrue);
+      expect(east.reachedGoal(const Position(1, 4)), isFalse);
     });
   });
 

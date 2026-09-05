@@ -147,4 +147,48 @@ void main() {
     expect(find.text('1–4'), findsOneWidget);
     expect(find.text('Waiting for opponent...'), findsNothing);
   });
+
+  testWidgets('three-player report uses south, east, and north', (tester) async {
+    final game = GameModel(
+      id: 'trio',
+      hostId: 'south',
+      playerIds: const ['south', 'east', 'north'],
+      status: 'finished',
+      settings: GameSettings(playerCount: 3),
+      winnerId: 'north',
+      gameState: const {},
+      sessionWins: const {'south': 0, 'east': 0, 'north': 1},
+      recordedBy: const ['south'],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GameResultPanel(
+          headline: 'Nice job!',
+          game: game,
+          currentUserId: 'south',
+          playersById: {
+            'south': AppUser(id: 'south', email: '', username: 'Pat'),
+            'east': AppUser(id: 'east', email: '', username: 'Kim'),
+            'north': AppUser(id: 'north', email: '', username: 'Sam'),
+          },
+          vsYou: const {
+            'east': HeadToHead(myWins: 0, theirWins: 1),
+            'north': HeadToHead(myWins: 0, theirWins: 1),
+          },
+          onRematch: () async {},
+          onBackToMenu: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('Pat (You)'), findsOneWidget);
+    expect(find.text('Kim'), findsOneWidget);
+    expect(find.text('Sam'), findsOneWidget);
+    expect(find.text('South'), findsOneWidget);
+    expect(find.text('East'), findsOneWidget);
+    expect(find.text('North'), findsOneWidget);
+    expect(find.text('West'), findsNothing);
+    expect(find.text('Winner'), findsOneWidget);
+  });
 }

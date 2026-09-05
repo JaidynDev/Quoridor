@@ -284,6 +284,16 @@ class _CreateGameDialogState extends State<CreateGameDialog> {
                       ),
                     ),
                     RadioListTile<int>(
+                      value: 3,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Three players'),
+                      subtitle: Text(
+                        'South, east, and north — six walls each. West stays empty.',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: AppPalette.inkSoft),
+                      ),
+                    ),
+                    RadioListTile<int>(
                       value: 4,
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Four players'),
