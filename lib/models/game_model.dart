@@ -144,6 +144,12 @@ class HeadToHead {
   String get scoreLabel => '$myWins–$theirWins';
 }
 
+String afterActionPlayerName(String? username, {required bool isYou}) {
+  final base =
+      (username != null && username.trim().isNotEmpty) ? username.trim() : 'Guest';
+  return isYou ? '$base (You)' : base;
+}
+
 Map<String, int> _intMap(dynamic raw) {
   if (raw is! Map) return const {};
   return {

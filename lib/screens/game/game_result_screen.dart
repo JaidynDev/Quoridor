@@ -45,9 +45,80 @@ class _GameResultScreenState extends State<GameResultScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final game = widget.game;
     final db = context.read<DatabaseService>();
-    final waiting = game.rematchRequests.contains(widget.currentUserId);
+    return StreamBuilder<List<AppUser>>(
+      key: ValueKey(_statsEpoch),
+      stream: db.streamUsersByIds(widget.game.playerIds),
+      builder: (context, snapshot) {
+        final byId = <String, AppUser>{
+          for (final user in snapshot.data ?? const <AppUser>[]) user.id: user,
+        };
+        return GameResultPanel(
+          headline: _headline,
+          game: widget.game,
+          currentUserId: widget.currentUserId,
+          playersById: byId,
+          onRematch: () => db.requestRematch(widget.game.id, widget.currentUserId),
+          onBackToMenu: () => context.go('/'),
+          seriesBuilder: (playerId) => db.streamSeriesStats(
+            widget.currentUserId,
+            playerId,
+          ),
+        );
+      },
+    );
+  }
+
+  String _randomWinMessage() {
+    const messages = [
+      'Did you cheat? Just kidding, nice job!',
+      'Quoridor master in the house!',
+      'Your wall placement was legendary.',
+      'The opponent never saw it coming.',
+      'Easy peasy lemon squeezy.',
+      'Winner winner chicken dinner!',
+    ];
+    return messages[Random().nextInt(messages.length)];
+  }
+
+  String _randomLossMessage() {
+    const messages = [
+      "Walls are hard, aren't they?",
+      'Maybe try Checkers?',
+      'Oof, blocked at the finish line.',
+      "Don't worry, my grandma plays like that too.",
+      'Better luck next time!',
+      'You were so close... kinda.',
+    ];
+    return messages[Random().nextInt(messages.length)];
+  }
+}
+
+class GameResultPanel extends StatelessWidget {
+  final String headline;
+  final GameModel game;
+  final String currentUserId;
+  final Map<String, AppUser> playersById;
+  final Future<void> Function()? onRematch;
+  final VoidCallback? onBackToMenu;
+  final Stream<Map<String, dynamic>?> Function(String playerId)? seriesBuilder;
+  final Map<String, HeadToHead> vsYou;
+
+  const GameResultPanel({
+    super.key,
+    required this.headline,
+    required this.game,
+    required this.currentUserId,
+    required this.playersById,
+    this.onRematch,
+    this.onBackToMenu,
+    this.seriesBuilder,
+    this.vsYou = const {},
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final waiting = game.rematchRequests.contains(currentUserId);
     final waitingLabel = game.playerIds.length > 2
         ? 'Waiting for others...'
         : 'Waiting for opponent...';
@@ -63,7 +134,7 @@ class _GameResultScreenState extends State<GameResultScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  _headline,
+                  headline,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: Colors.white,
@@ -72,44 +143,39 @@ class _GameResultScreenState extends State<GameResultScreen> {
                   ),
                 ),
                 const SizedBox(height: 28),
-                StreamBuilder<List<AppUser>>(
-                  key: ValueKey(_statsEpoch),
-                  stream: db.streamUsersByIds(game.playerIds),
-                  builder: (context, snapshot) {
-                    final byId = <String, AppUser>{
-                      for (final user in snapshot.data ?? const <AppUser>[])
-                        user.id: user,
-                    };
-                    return LayoutBuilder(
-                      builder: (context, constraints) {
-                        final seats = game.playerIds.length;
-                        const gap = 12.0;
-                        final columns = seats <= 2
-                            ? seats.clamp(1, 2)
-                            : (constraints.maxWidth >= 560 ? 4 : 2);
-                        final width = seats == 0
-                            ? constraints.maxWidth
-                            : (constraints.maxWidth - gap * (columns - 1)) /
-                                columns;
-                        return Wrap(
-                          spacing: gap,
-                          runSpacing: gap,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            for (var i = 0; i < game.playerIds.length; i++)
-                              SizedBox(
-                                width: width.clamp(148.0, 300.0),
-                                child: _PlayerResultCard(
-                                  game: game,
-                                  seatIndex: i,
-                                  playerId: game.playerIds[i],
-                                  user: byId[game.playerIds[i]],
-                                  currentUserId: widget.currentUserId,
-                                ),
-                              ),
-                          ],
-                        );
-                      },
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final seats = game.playerIds.length;
+                    const gap = 12.0;
+                    final columns = seats <= 2
+                        ? seats.clamp(1, 2)
+                        : (constraints.maxWidth >= 680 ? 4 : 2);
+                    final width = seats == 0
+                        ? constraints.maxWidth
+                        : (constraints.maxWidth - gap * (columns - 1)) /
+                            columns;
+                    return Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        for (var i = 0; i < game.playerIds.length; i++)
+                          SizedBox(
+                            width: width.clamp(130.0, 300.0),
+                            child: _PlayerResultCard(
+                              game: game,
+                              seatIndex: i,
+                              playerId: game.playerIds[i],
+                              user: playersById[game.playerIds[i]],
+                              currentUserId: currentUserId,
+                              vsYou: vsYou[game.playerIds[i]],
+                              seriesStream:
+                                  game.playerIds[i] == currentUserId
+                                      ? null
+                                      : seriesBuilder?.call(game.playerIds[i]),
+                            ),
+                          ),
+                      ],
                     );
                   },
                 ),
@@ -131,9 +197,7 @@ class _GameResultScreenState extends State<GameResultScreen> {
                   )
                 else
                   FilledButton(
-                    onPressed: () async {
-                      await db.requestRematch(game.id, widget.currentUserId);
-                    },
+                    onPressed: onRematch,
                     style: FilledButton.styleFrom(
                       backgroundColor: AppPalette.pine,
                       foregroundColor: Colors.white,
@@ -146,7 +210,7 @@ class _GameResultScreenState extends State<GameResultScreen> {
                   ),
                 const SizedBox(height: 12),
                 OutlinedButton(
-                  onPressed: () => context.go('/'),
+                  onPressed: onBackToMenu,
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 32,
@@ -164,30 +228,6 @@ class _GameResultScreenState extends State<GameResultScreen> {
       ),
     );
   }
-
-  String _randomWinMessage() {
-    final messages = [
-      'Did you cheat? Just kidding, nice job!',
-      'Quoridor master in the house!',
-      'Your wall placement was legendary.',
-      'The opponent never saw it coming.',
-      'Easy peasy lemon squeezy.',
-      'Winner winner chicken dinner!',
-    ];
-    return messages[Random().nextInt(messages.length)];
-  }
-
-  String _randomLossMessage() {
-    final messages = [
-      "Walls are hard, aren't they?",
-      'Maybe try Checkers?',
-      'Oof, blocked at the finish line.',
-      "Don't worry, my grandma plays like that too.",
-      'Better luck next time!',
-      'You were so close... kinda.',
-    ];
-    return messages[Random().nextInt(messages.length)];
-  }
 }
 
 class _PlayerResultCard extends StatelessWidget {
@@ -198,6 +238,8 @@ class _PlayerResultCard extends StatelessWidget {
   final String playerId;
   final AppUser? user;
   final String currentUserId;
+  final HeadToHead? vsYou;
+  final Stream<Map<String, dynamic>?>? seriesStream;
 
   const _PlayerResultCard({
     required this.game,
@@ -205,25 +247,24 @@ class _PlayerResultCard extends StatelessWidget {
     required this.playerId,
     required this.user,
     required this.currentUserId,
+    this.vsYou,
+    this.seriesStream,
   });
+
+  bool get isYou => playerId == currentUserId;
 
   @override
   Widget build(BuildContext context) {
-    final db = context.read<DatabaseService>();
-    final isYou = playerId == currentUserId;
     final won = game.winnerId == playerId;
     final color = kPawnColors[seatIndex % kPawnColors.length];
     final seats = game.playerIds.length;
     final side = seats == 4
         ? _sides4[seatIndex % 4]
         : (seatIndex == 0 ? 'South' : 'North');
-    final baseName =
-        (user != null && user!.username.trim().isNotEmpty) ? user!.username : 'Guest';
-    final name = isYou ? '$baseName (You)' : baseName;
+    final name = afterActionPlayerName(user?.username, isYou: isYou);
     final sessionW = game.sessionWinsFor(playerId);
     final sessionL = game.sessionLossesFor(playerId);
-    final showCareer = _canShowCareer();
-    final career = showCareer ? _careerRecord() : null;
+    final career = _canShowCareer() ? _careerRecord() : null;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
@@ -287,33 +328,38 @@ class _PlayerResultCard extends StatelessWidget {
             label: 'Lifetime',
             value: career == null ? '—' : '${career.$1}–${career.$2}',
           ),
-          if (!isYou)
-            StreamBuilder<Map<String, dynamic>?>(
-              stream: db.streamSeriesStats(currentUserId, playerId),
-              builder: (context, snapshot) {
-                final vs = HeadToHead.fromSeries(snapshot.data, currentUserId);
-                return _StatLine(label: 'You vs', value: vs.scoreLabel);
-              },
-            ),
+          if (!isYou) _vsYouLine(),
         ],
       ),
     );
   }
 
+  Widget _vsYouLine() {
+    if (vsYou != null) {
+      return _StatLine(label: 'You vs', value: vsYou!.scoreLabel);
+    }
+    final stream = seriesStream;
+    if (stream == null) {
+      return const _StatLine(label: 'You vs', value: '0–0');
+    }
+    return StreamBuilder<Map<String, dynamic>?>(
+      stream: stream,
+      builder: (context, snapshot) {
+        final vs = HeadToHead.fromSeries(snapshot.data, currentUserId);
+        return _StatLine(label: 'You vs', value: vs.scoreLabel);
+      },
+    );
+  }
+
   bool _canShowCareer() {
     if (user == null) return false;
-    // Other browsers' device-local guests don't share career stats.
     if (user!.id.startsWith('guest_') && !isYou) return false;
     return true;
   }
 
-  bool get isYou => playerId == currentUserId;
-
   (int, int) _careerRecord() {
     var wins = user?.wins ?? 0;
     var losses = user?.losses ?? 0;
-    // The local player already wrote their own career row. Other seats may
-    // not have applied it yet, so fold this game into the number we show.
     if (isYou) return (wins, losses);
     if (!game.recordedBy.contains(playerId) && game.winnerId != null) {
       if (game.winnerId == playerId) {
@@ -338,11 +384,14 @@ class _StatLine extends StatelessWidget {
       padding: const EdgeInsets.only(top: 4),
       child: Row(
         children: [
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
+          Flexible(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
           Text(
             value,
             style: const TextStyle(

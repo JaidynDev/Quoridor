@@ -93,4 +93,11 @@ void main() {
     expect(HeadToHead.fromSeries(data, 'b').scoreLabel, '1–4');
     expect(HeadToHead.fromSeries(null, 'a').scoreLabel, '0–0');
   });
+
+  test('after-action names put (You) on the local player', () {
+    expect(afterActionPlayerName('Alex', isYou: true), 'Alex (You)');
+    expect(afterActionPlayerName('Alex', isYou: false), 'Alex');
+    expect(afterActionPlayerName('', isYou: true), 'Guest (You)');
+    expect(afterActionPlayerName(null, isYou: false), 'Guest');
+  });
 }
