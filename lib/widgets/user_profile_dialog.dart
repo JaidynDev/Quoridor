@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/game_model.dart';
 import '../models/user_model.dart';
 import '../screens/auth/auth_screen.dart';
 import '../services/auth_service.dart';
@@ -86,26 +87,16 @@ class UserProfileDialog extends StatelessWidget {
                   StreamBuilder<Map<String, dynamic>?>(
                     stream: db.streamSeriesStats(currentUserId, userId),
                     builder: (context, seriesSnap) {
-                      final data = seriesSnap.data;
-                      int myWins = 0;
-                      int theirWins = 0;
-                      
-                      if (data != null) {
-                        final p1 = data['player1Id'];
-                        if (p1 == currentUserId) {
-                          myWins = data['p1Wins'] ?? 0;
-                          theirWins = data['p2Wins'] ?? 0;
-                        } else {
-                          myWins = data['p2Wins'] ?? 0;
-                          theirWins = data['p1Wins'] ?? 0;
-                        }
-                      }
+                      final vs = HeadToHead.fromSeries(
+                        seriesSnap.data,
+                        currentUserId,
+                      );
 
                       return Column(
                         children: [
                           Text("VS YOU", style: Theme.of(context).textTheme.labelLarge),
                           const SizedBox(height: 8),
-                          Text("$myWins - $theirWins", style: Theme.of(context).textTheme.headlineMedium),
+                          Text(vs.scoreLabel, style: Theme.of(context).textTheme.headlineMedium),
                         ],
                       );
                     }

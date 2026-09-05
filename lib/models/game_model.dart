@@ -59,6 +59,10 @@ class GameModel {
   final List<Map<String, dynamic>> moveLog;
   final List<String> rematchRequests;
 
+  /// Wins at this table across rematches. Survives a rematch reset.
+  final Map<String, int> sessionWins;
+  final List<String> recordedBy;
+
   GameModel({
     required this.id,
     required this.hostId,
@@ -71,6 +75,8 @@ class GameModel {
     required this.gameState,
     this.moveLog = const [],
     this.rematchRequests = const [],
+    this.sessionWins = const {},
+    this.recordedBy = const [],
   });
 
   Map<String, dynamic> toMap() {
@@ -85,6 +91,8 @@ class GameModel {
       'gameState': gameState,
       'moveLog': moveLog,
       'rematchRequests': rematchRequests,
+      'sessionWins': sessionWins,
+      'recordedBy': recordedBy,
     };
   }
 
@@ -101,6 +109,45 @@ class GameModel {
       gameState: map['gameState'] ?? {},
       moveLog: List<Map<String, dynamic>>.from(map['moveLog'] ?? []),
       rematchRequests: List<String>.from(map['rematchRequests'] ?? []),
+      sessionWins: _intMap(map['sessionWins']),
+      recordedBy: List<String>.from(map['recordedBy'] ?? []),
     );
   }
+
+  int get sessionGames =>
+      sessionWins.values.fold<int>(0, (sum, n) => sum + n);
+
+  int sessionWinsFor(String playerId) => sessionWins[playerId] ?? 0;
+
+  int sessionLossesFor(String playerId) =>
+      (sessionGames - sessionWinsFor(playerId)).clamp(0, sessionGames);
+}
+
+/// Lifetime head-to-head pulled from a `series/{id1_id2}` document.
+class HeadToHead {
+  final int myWins;
+  final int theirWins;
+
+  const HeadToHead({this.myWins = 0, this.theirWins = 0});
+
+  factory HeadToHead.fromSeries(Map<String, dynamic>? data, String myId) {
+    if (data == null) return const HeadToHead();
+    final p1 = data['player1Id'];
+    final p1Wins = (data['p1Wins'] as num?)?.toInt() ?? 0;
+    final p2Wins = (data['p2Wins'] as num?)?.toInt() ?? 0;
+    if (myId == p1) {
+      return HeadToHead(myWins: p1Wins, theirWins: p2Wins);
+    }
+    return HeadToHead(myWins: p2Wins, theirWins: p1Wins);
+  }
+
+  String get scoreLabel => '$myWins–$theirWins';
+}
+
+Map<String, int> _intMap(dynamic raw) {
+  if (raw is! Map) return const {};
+  return {
+    for (final entry in raw.entries)
+      entry.key.toString(): (entry.value as num?)?.toInt() ?? 0,
+  };
 }

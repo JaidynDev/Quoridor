@@ -51,4 +51,46 @@ void main() {
 
     expect(game.toMap().containsKey('invitedUserId'), isFalse);
   });
+
+  test('session W/L counts rematch wins at this table', () {
+    final game = GameModel(
+      id: 'table',
+      hostId: 'south',
+      playerIds: const ['south', 'east', 'north', 'west'],
+      status: 'finished',
+      settings: GameSettings(playerCount: 4),
+      winnerId: 'south',
+      gameState: const {},
+      sessionWins: const {
+        'south': 2,
+        'east': 1,
+        'north': 0,
+        'west': 0,
+      },
+    );
+
+    expect(game.sessionGames, 3);
+    expect(game.sessionWinsFor('south'), 2);
+    expect(game.sessionLossesFor('south'), 1);
+    expect(game.sessionWinsFor('east'), 1);
+    expect(game.sessionLossesFor('east'), 2);
+    expect(game.sessionWinsFor('west'), 0);
+    expect(game.sessionLossesFor('west'), 3);
+
+    final copy = GameModel.fromMap(game.toMap(), game.id);
+    expect(copy.sessionWinsFor('south'), 2);
+    expect(copy.recordedBy, isEmpty);
+  });
+
+  test('head-to-head maps series docs onto the local player', () {
+    const data = {
+      'player1Id': 'a',
+      'player2Id': 'b',
+      'p1Wins': 4,
+      'p2Wins': 1,
+    };
+    expect(HeadToHead.fromSeries(data, 'a').scoreLabel, '4–1');
+    expect(HeadToHead.fromSeries(data, 'b').scoreLabel, '1–4');
+    expect(HeadToHead.fromSeries(null, 'a').scoreLabel, '0–0');
+  });
 }

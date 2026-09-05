@@ -94,11 +94,22 @@ class AuthService {
 
   Future<AppUser> _guestFromAuth(User user) async {
     final local = await _guestService?.getGuestUser();
+    var wins = local?.wins ?? 0;
+    var losses = local?.losses ?? 0;
+    try {
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      if (doc.exists) {
+        wins = doc.data()?['wins'] ?? wins;
+        losses = doc.data()?['losses'] ?? losses;
+      }
+    } catch (_) {}
     final profile = AppUser(
       id: user.uid,
       email: '',
       username: local?.username ?? 'Guest',
       photoUrl: local?.photoUrl,
+      wins: wins,
+      losses: losses,
       isGuest: true,
     );
     try {
