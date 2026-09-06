@@ -13,6 +13,9 @@ const Color kMoveAccent = Color(0xFF2FBE8C);
 const Color kInvalidAccent = Color(0xFFDF5B4F);
 const Color kP1Color = Color(0xFFF7E9C8);
 const Color kP2Color = Color(0xFF2F4A5C);
+const Color kP3Color = Color(0xFFC45C26);
+const Color kP4Color = Color(0xFF16705B);
+const List<Color> kPawnColors = [kP1Color, kP2Color, kP3Color, kP4Color];
 
 /// Fixed three-quarter camera that maps board coordinates to the screen.
 ///
@@ -33,17 +36,24 @@ class BoardProjection {
 
   final double focal;
   final Offset origin;
-  final bool flipped;
+  final int rotation;
+
+  bool get flipped => rotation == 2;
 
   const BoardProjection({
     required this.focal,
     required this.origin,
-    required this.flipped,
+    this.rotation = 0,
   });
 
   /// Scales and centres the camera so the whole board fits inside [size].
-  factory BoardProjection.fit(Size size, {required bool flipped}) {
-    const probe = BoardProjection(focal: 1, origin: Offset.zero, flipped: false);
+  factory BoardProjection.fit(
+    Size size, {
+    bool flipped = false,
+    int? rotation,
+  }) {
+    final rot = rotation ?? (flipped ? 2 : 0);
+    final probe = BoardProjection(focal: 1, origin: Offset.zero, rotation: rot);
     const m = frameMargin;
     const heads = wallHeight + 0.85;
 
@@ -77,8 +87,21 @@ class BoardProjection {
         size.width / 2 - (minX + maxX) / 2 * focal,
         size.height / 2 - (minY + maxY) / 2 * focal,
       ),
-      flipped: flipped,
+      rotation: rot,
     );
+  }
+
+  /// Rotate in the board plane so a given seat sits nearest the camera.
+  static List<double> _rotate(double cx, double cy, int steps) {
+    var x = cx;
+    var y = cy;
+    final n = ((steps % 4) + 4) % 4;
+    for (var i = 0; i < n; i++) {
+      final t = x;
+      x = y;
+      y = -t;
+    }
+    return [x, y];
   }
 
   Offset project(double x, double y, double z) {
@@ -111,20 +134,16 @@ class BoardProjection {
     final sinY = math.sin(_yaw);
     var cx = rx * cosY + ry * sinY;
     var cy = -rx * sinY + ry * cosY;
-    if (flipped) {
-      cx = -cx;
-      cy = -cy;
-    }
-    return Offset(cx + span / 2, cy + span / 2);
+    final inv = _rotate(cx, cy, (4 - rotation) % 4);
+    return Offset(inv[0] + span / 2, inv[1] + span / 2);
   }
 
   _CameraPoint _camera(double x, double y, double z) {
     var cx = x - span / 2;
     var cy = y - span / 2;
-    if (flipped) {
-      cx = -cx;
-      cy = -cy;
-    }
+    final rot = _rotate(cx, cy, rotation);
+    cx = rot[0];
+    cy = rot[1];
 
     final cosY = math.cos(_yaw);
     final sinY = math.sin(_yaw);
@@ -539,7 +558,7 @@ class BoardPainter extends CustomPainter {
   bool shouldRepaint(BoardPainter old) =>
       old.proj.focal != proj.focal ||
       old.proj.origin != proj.origin ||
-      old.proj.flipped != proj.flipped ||
+      old.proj.rotation != proj.rotation ||
       old.pulse != pulse ||
       old.ghostWall != ghostWall ||
       old.ghostValid != ghostValid ||

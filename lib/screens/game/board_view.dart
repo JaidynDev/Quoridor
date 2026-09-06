@@ -10,15 +10,13 @@ import 'board_3d.dart';
 class GameBoard extends StatefulWidget {
   final GameModel game;
   final String userId;
-  final AppUser? p1User;
-  final AppUser? p2User;
+  final List<AppUser?> players;
 
   const GameBoard({
     super.key,
     required this.game,
     required this.userId,
-    this.p1User,
-    this.p2User,
+    this.players = const [],
   });
 
   @override
@@ -30,6 +28,9 @@ class _GameBoardState extends State<GameBoard>
   Wall? _draggedWall;
   bool _isValidPlacement = false;
   late final AnimationController _pulse;
+
+  int get _seats => widget.game.settings.seats;
+  List<PlayerSeat> get _seatsInfo => QuoridorLogic.seatsFor(_seats);
 
   @override
   void initState() {
@@ -46,36 +47,45 @@ class _GameBoardState extends State<GameBoard>
     super.dispose();
   }
 
+  AppUser? _userFor(int index) {
+    if (index < widget.players.length) return widget.players[index];
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = widget.game.gameState;
-    final p1Pos = Position(state['p1']['x'], state['p1']['y']);
-    final p2Pos = Position(state['p2']['x'], state['p2']['y']);
-    final walls = (state['walls'] as List)
+    final pawns = QuoridorLogic.pawnsFromState(state, _seats);
+    final walls = (state['walls'] as List? ?? [])
         .map((w) => Wall(w['x'], w['y'], w['orientation']))
         .toList();
 
     final myIndex = widget.game.playerIds.indexOf(widget.userId);
-    final isMyTurn = widget.game.currentTurnIndex == myIndex;
-    final int wallsLeft =
-        (myIndex == 0 ? state['p1WallsLeft'] : state['p2WallsLeft']) ?? 10;
+    final isMyTurn = widget.game.currentTurnIndex == myIndex && myIndex >= 0;
+    final wallsLeft = myIndex >= 0
+        ? (state[QuoridorLogic.wallsKey(myIndex)] ??
+            QuoridorLogic.wallsEach(_seats)) as int
+        : 0;
 
-    // Each player sits at their own end of the board. Player 2 starts on the
-    // far row, so their camera is the one that gets turned around.
-    final flipped = myIndex == 1;
+    final rotation =
+        myIndex >= 0 ? _seatsInfo[myIndex].cameraRotation : 0;
 
     final validMoves = <Position>{};
-    if (isMyTurn && myIndex >= 0) {
-      final myPos = myIndex == 0 ? p1Pos : p2Pos;
-      final otherPos = myIndex == 0 ? p2Pos : p1Pos;
-      validMoves.addAll(QuoridorLogic.getValidMoves(myPos, walls, [otherPos]));
+    if (isMyTurn) {
+      final myPos = pawns[myIndex];
+      final others = [
+        for (var i = 0; i < pawns.length; i++)
+          if (i != myIndex) pawns[i],
+      ];
+      validMoves.addAll(QuoridorLogic.getValidMoves(myPos, walls, others));
     }
 
     final canPlaceWall = isMyTurn && wallsLeft > 0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final proj = BoardProjection.fit(constraints.biggest, flipped: flipped);
+        final proj =
+            BoardProjection.fit(constraints.biggest, rotation: rotation);
 
         return AnimatedBuilder(
           animation: _pulse,
@@ -88,11 +98,11 @@ class _GameBoardState extends State<GameBoard>
                   _handleTap(details.localPosition, proj, validMoves),
               onPanStart: canPlaceWall
                   ? (details) => _updateGhostWall(
-                      details.localPosition, proj, walls, p1Pos, p2Pos)
+                      details.localPosition, proj, walls, pawns)
                   : null,
               onPanUpdate: canPlaceWall
                   ? (details) => _updateGhostWall(
-                      details.localPosition, proj, walls, p1Pos, p2Pos)
+                      details.localPosition, proj, walls, pawns)
                   : null,
               onPanEnd: canPlaceWall ? (_) => _finalizeWallPlacement() : null,
               onPanCancel: canPlaceWall ? _clearGhostWall : null,
@@ -111,7 +121,7 @@ class _GameBoardState extends State<GameBoard>
                       ),
                     ),
                   ),
-                  ..._buildPieces(proj, p1Pos, p2Pos, pulse),
+                  ..._buildPieces(proj, pawns, pulse),
                 ],
               ),
             );
@@ -123,28 +133,20 @@ class _GameBoardState extends State<GameBoard>
 
   List<Widget> _buildPieces(
     BoardProjection proj,
-    Position p1Pos,
-    Position p2Pos,
+    List<Position> pawns,
     double pulse,
   ) {
     final playing = widget.game.status == 'playing';
     final pieces = <_PieceSpec>[
-      _PieceSpec(
-        pos: p1Pos,
-        user: widget.p1User,
-        color: kP1Color,
-        isActive: playing && widget.game.currentTurnIndex == 0,
-      ),
-      _PieceSpec(
-        pos: p2Pos,
-        user: widget.p2User,
-        color: kP2Color,
-        isActive: playing && widget.game.currentTurnIndex == 1,
-      ),
+      for (var i = 0; i < pawns.length; i++)
+        _PieceSpec(
+          pos: pawns[i],
+          user: _userFor(i),
+          color: kPawnColors[i % kPawnColors.length],
+          isActive: playing && widget.game.currentTurnIndex == i,
+        ),
     ];
 
-    // Painter's order: whichever pawn is further from the camera goes down
-    // first so a nearer pawn overlaps it rather than the other way around.
     pieces.sort((a, b) => _pieceDepth(proj, b).compareTo(_pieceDepth(proj, a)));
 
     return pieces.map((piece) {
@@ -200,10 +202,8 @@ class _GameBoardState extends State<GameBoard>
     Offset local,
     BoardProjection proj,
     List<Wall> walls,
-    Position p1,
-    Position p2,
+    List<Position> pawns,
   ) {
-    // Aim above the finger so the wall being placed is not hidden by it.
     final lift = proj.scaleAt(
           BoardProjection.span / 2,
           BoardProjection.span / 2,
@@ -217,8 +217,6 @@ class _GameBoardState extends State<GameBoard>
     final nearestX = rawX.round();
     final nearestY = rawY.round();
 
-    // Snap to whichever grid line the touch is closest to, then centre the
-    // two-cell span on the touch instead of hanging it off to one side.
     final orientation =
         (rawX - nearestX).abs() < (rawY - nearestY).abs() ? 1 : 0;
 
@@ -233,7 +231,8 @@ class _GameBoardState extends State<GameBoard>
     }
 
     final candidate = Wall(wallX, wallY, orientation);
-    final valid = QuoridorLogic.isValidWall(candidate, walls, p1, p2);
+    final valid =
+        QuoridorLogic.isValidWall(candidate, walls, pawns, _seatsInfo);
     if (candidate == _draggedWall && valid == _isValidPlacement) return;
 
     setState(() {
@@ -270,30 +269,22 @@ class _GameBoardState extends State<GameBoard>
   Future<void> _makeMove(Position newPos) async {
     final db = context.read<DatabaseService>();
     final myIndex = widget.game.playerIds.indexOf(widget.userId);
+    if (myIndex < 0) return;
     final newState = Map<String, dynamic>.from(widget.game.gameState);
-
-    if (myIndex == 0) {
-      newState['p1'] = {'x': newPos.x, 'y': newPos.y};
-    } else {
-      newState['p2'] = {'x': newPos.x, 'y': newPos.y};
-    }
+    newState[QuoridorLogic.pawnKey(myIndex)] = newPos.toMap();
 
     final logEntry = {
       'playerId': widget.userId,
       'type': 'move',
-      'to': {'x': newPos.x, 'y': newPos.y},
+      'to': newPos.toMap(),
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
 
-    final nextTurn = (widget.game.currentTurnIndex + 1) % 2;
+    final nextTurn = (widget.game.currentTurnIndex + 1) % _seats;
     await db.updateGameState(widget.game.id, newState, nextTurn,
         logEntry: logEntry);
 
-    bool won = false;
-    if (myIndex == 0 && newPos.y == 8) won = true;
-    if (myIndex == 1 && newPos.y == 0) won = true;
-
-    if (won) {
+    if (_seatsInfo[myIndex].reachedGoal(newPos)) {
       await db.setWinner(widget.game.id, widget.userId);
     }
   }
@@ -301,17 +292,15 @@ class _GameBoardState extends State<GameBoard>
   Future<void> _placeWall(Wall wall) async {
     final db = context.read<DatabaseService>();
     final myIndex = widget.game.playerIds.indexOf(widget.userId);
+    if (myIndex < 0) return;
     final newState = Map<String, dynamic>.from(widget.game.gameState);
 
     final wallsList = List<Map<String, dynamic>>.from(newState['walls'] ?? []);
     wallsList.add({'x': wall.x, 'y': wall.y, 'orientation': wall.orientation});
     newState['walls'] = wallsList;
 
-    if (myIndex == 0) {
-      newState['p1WallsLeft'] = (newState['p1WallsLeft'] ?? 10) - 1;
-    } else {
-      newState['p2WallsLeft'] = (newState['p2WallsLeft'] ?? 10) - 1;
-    }
+    final key = QuoridorLogic.wallsKey(myIndex);
+    newState[key] = ((newState[key] ?? QuoridorLogic.wallsEach(_seats)) as int) - 1;
 
     final logEntry = {
       'playerId': widget.userId,
@@ -320,7 +309,7 @@ class _GameBoardState extends State<GameBoard>
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
 
-    final nextTurn = (widget.game.currentTurnIndex + 1) % 2;
+    final nextTurn = (widget.game.currentTurnIndex + 1) % _seats;
     await db.updateGameState(widget.game.id, newState, nextTurn,
         logEntry: logEntry);
   }

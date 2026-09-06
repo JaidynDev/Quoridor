@@ -55,6 +55,36 @@ void main() {
       expect(p1Start.dy, closeTo(p2StartFlipped.dy, 0.001));
     });
 
+    test('quarter turns still invert on the floor plane', () {
+      for (final rotation in [0, 1, 2, 3]) {
+        final proj = BoardProjection.fit(size, rotation: rotation);
+
+        for (double y = 0.5; y < BoardProjection.span; y += 1) {
+          for (double x = 0.5; x < BoardProjection.span; x += 1) {
+            final screen = proj.project(x, y, 0);
+            final back = proj.unproject(screen);
+
+            expect(back, isNotNull, reason: 'rotation=$rotation at ($x, $y)');
+            expect(back!.dx, closeTo(x, 0.001),
+                reason: 'rotation=$rotation at ($x, $y)');
+            expect(back.dy, closeTo(y, 0.001),
+                reason: 'rotation=$rotation at ($x, $y)');
+          }
+        }
+      }
+    });
+
+    test('east seat sits at the near edge of the camera', () {
+      final south = BoardProjection.fit(size, rotation: 0);
+      final east = BoardProjection.fit(size, rotation: 1);
+
+      final southStart = south.project(4.5, 0.5, 0);
+      final eastStart = east.project(8.5, 4.5, 0);
+
+      expect(southStart.dx, closeTo(eastStart.dx, 0.001));
+      expect(southStart.dy, closeTo(eastStart.dy, 0.001));
+    });
+
     test('nearer cells project larger than far cells', () {
       final proj = BoardProjection.fit(size, flipped: false);
       expect(proj.scaleAt(4.5, 0.5), greaterThan(proj.scaleAt(4.5, 8.5)));

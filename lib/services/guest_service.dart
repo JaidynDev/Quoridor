@@ -6,6 +6,8 @@ class GuestService {
   static const String _guestIdKey = 'guest_id';
   static const String _guestUsernameKey = 'guest_username';
   static const String _guestPhotoUrlKey = 'guest_photo_url';
+  static const String guestWinsKey = 'guest_wins';
+  static const String guestLossesKey = 'guest_losses';
   
   final _uuid = const Uuid();
 
@@ -21,7 +23,11 @@ class GuestService {
     }
     
     // Get or create guest username
-    String username = prefs.getString(_guestUsernameKey) ?? 'Guest${guestId.substring(0, 6)}';
+    String username = prefs.getString(_guestUsernameKey) ?? 'Guest';
+    if (username.startsWith('Guestguest')) {
+      username = 'Guest';
+      await prefs.setString(_guestUsernameKey, username);
+    }
     
     // Get guest photo URL (optional, can be null)
     String? photoUrl = prefs.getString(_guestPhotoUrlKey);
@@ -31,6 +37,8 @@ class GuestService {
       email: '', // Guest users don't have email
       username: username,
       photoUrl: photoUrl,
+      wins: prefs.getInt(guestWinsKey) ?? 0,
+      losses: prefs.getInt(guestLossesKey) ?? 0,
       isGuest: true,
     );
   }
@@ -63,6 +71,8 @@ class GuestService {
     await prefs.remove(_guestIdKey);
     await prefs.remove(_guestUsernameKey);
     await prefs.remove(_guestPhotoUrlKey);
+    await prefs.remove(guestWinsKey);
+    await prefs.remove(guestLossesKey);
   }
 }
 

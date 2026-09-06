@@ -1,13 +1,46 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../screens/auth/auth_screen.dart';
+import '../../models/game_model.dart';
 import '../../models/user_model.dart';
 import '../../services/database_service.dart';
+import '../../widgets/game_invite.dart';
+import '../../widgets/user_profile_dialog.dart';
 
 class FriendsScreen extends StatelessWidget {
   const FriendsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AppUser?>();
+    if (user == null || user.isGuest) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Friends')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_outline, size: 48),
+                const SizedBox(height: 16),
+                const Text(
+                  'Friends and invites need an account so they follow you across devices.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: () => AuthScreen.show(context),
+                  child: const Text('Sign In'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return DefaultTabController(
       length: 3,
       child: Scaffold(
@@ -16,7 +49,7 @@ class FriendsScreen extends StatelessWidget {
           bottom: const TabBar(
             tabs: [
               Tab(text: "Friends"),
-              Tab(text: "Requests"),
+              Tab(text: "Inbox"),
               Tab(text: "Add Friend"),
             ],
           ),
@@ -67,11 +100,26 @@ class FriendsListTab extends StatelessWidget {
               ),
               title: Text(friend.username),
               subtitle: Text("Wins: ${friend.wins} | Losses: ${friend.losses}"),
-              trailing: IconButton(
-                icon: const Icon(Icons.person_remove, color: Colors.red),
-                onPressed: () {
-                  _showRemoveConfirmation(context, db, user.id, friend);
-                },
+              onTap: () => UserProfileDialog.show(context, friend.id, user.id),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Invite to game',
+                    icon: const Icon(Icons.sports_esports),
+                    onPressed: () => inviteFriendToGame(
+                      context,
+                      hostId: user.id,
+                      invitee: friend,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.person_remove, color: Colors.red),
+                    onPressed: () {
+                      _showRemoveConfirmation(context, db, user.id, friend);
+                    },
+                  ),
+                ],
               ),
             );
           },
@@ -115,48 +163,143 @@ class FriendRequestsTab extends StatelessWidget {
 
     if (user == null) return const SizedBox();
 
-    return StreamBuilder<List<String>>(
-      stream: db.streamFriendRequests(user.id),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        
-        final requestIds = snapshot.data!;
-        if (requestIds.isEmpty) return const Center(child: Text("No pending requests."));
+    return ListView(
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text('Game invites', style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
+        StreamBuilder<List<GameModel>>(
+          stream: db.streamIncomingInvites(user.id),
+          builder: (context, inviteSnap) {
+            final invites = inviteSnap.data ?? [];
+            if (invites.isEmpty) {
+              return const ListTile(
+                dense: true,
+                title: Text('No game invites.'),
+              );
+            }
+            return Column(
+              children: invites
+                  .map((game) => _GameInviteTile(game: game, currentUserId: user.id))
+                  .toList(),
+            );
+          },
+        ),
+        const Divider(),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: Text('Friend requests', style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
+        StreamBuilder<List<String>>(
+          stream: db.streamFriendRequests(user.id),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              ));
+            }
 
-        return StreamBuilder<List<AppUser>>(
-          stream: db.streamUsersByIds(requestIds),
-          builder: (context, userSnap) {
-            if (!userSnap.hasData) return const Center(child: CircularProgressIndicator());
-            
-            final requesters = userSnap.data!;
-            
-            return ListView.builder(
-              itemCount: requesters.length,
-              itemBuilder: (context, index) {
-                final requester = requesters[index];
-                return ListTile(
-                  leading: CircleAvatar(
-                     backgroundImage: requester.photoUrl != null ? NetworkImage(requester.photoUrl!) : null,
-                     child: requester.photoUrl == null ? Text(requester.username[0].toUpperCase()) : null,
-                  ),
-                  title: Text(requester.username),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.check, color: Colors.green),
-                        onPressed: () => db.acceptFriendRequest(user.id, requester.id),
+            final requestIds = snapshot.data!;
+            if (requestIds.isEmpty) {
+              return const ListTile(
+                dense: true,
+                title: Text('No pending friend requests.'),
+              );
+            }
+
+            return StreamBuilder<List<AppUser>>(
+              stream: db.streamUsersByIds(requestIds),
+              builder: (context, userSnap) {
+                if (!userSnap.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final requesters = userSnap.data!;
+
+                return Column(
+                  children: requesters.map((requester) {
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundImage: requester.photoUrl != null
+                            ? NetworkImage(requester.photoUrl!)
+                            : null,
+                        child: requester.photoUrl == null
+                            ? Text(requester.username[0].toUpperCase())
+                            : null,
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.red),
-                        onPressed: () => db.declineFriendRequest(user.id, requester.id),
+                      title: Text(requester.username),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.check, color: Colors.green),
+                            onPressed: () =>
+                                db.acceptFriendRequest(user.id, requester.id),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.red),
+                            onPressed: () =>
+                                db.declineFriendRequest(user.id, requester.id),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                  }).toList(),
                 );
               },
             );
           },
+        ),
+      ],
+    );
+  }
+}
+
+class _GameInviteTile extends StatelessWidget {
+  final GameModel game;
+  final String currentUserId;
+
+  const _GameInviteTile({required this.game, required this.currentUserId});
+
+  @override
+  Widget build(BuildContext context) {
+    final db = context.read<DatabaseService>();
+    return StreamBuilder<AppUser?>(
+      stream: db.streamUser(game.hostId),
+      builder: (context, snapshot) {
+        final hostName = snapshot.data?.username ?? 'Someone';
+        return ListTile(
+          leading: const Icon(Icons.sports_esports),
+          title: Text('$hostName invited you to play'),
+          subtitle: Text('${game.settings.displayName} · ${game.settings.clockLabel}'),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: 'Accept',
+                icon: const Icon(Icons.check, color: Colors.green),
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  final router = GoRouter.of(context);
+                  try {
+                    await db.joinGame(game.id, currentUserId);
+                    router.go('/game/${game.id}');
+                  } catch (e) {
+                    messenger.showSnackBar(
+                      SnackBar(content: Text('Could not join: $e')),
+                    );
+                  }
+                },
+              ),
+              IconButton(
+                tooltip: 'Decline',
+                icon: const Icon(Icons.close, color: Colors.red),
+                onPressed: () => db.declineGameInvite(game.id),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -227,8 +370,21 @@ class _AddFriendTabState extends State<AddFriendTab> {
                 ),
                 title: Text(user.username),
                 subtitle: Text("Wins: ${user.wins}"),
+                onTap: currentUser == null
+                    ? null
+                    : () => UserProfileDialog.show(context, user.id, currentUser.id),
                 trailing: isFriend 
-                  ? const Icon(Icons.check, color: Colors.green)
+                  ? IconButton(
+                      tooltip: 'Invite to game',
+                      icon: const Icon(Icons.sports_esports),
+                      onPressed: currentUser == null
+                          ? null
+                          : () => inviteFriendToGame(
+                                context,
+                                hostId: currentUser.id,
+                                invitee: user,
+                              ),
+                    )
                   : IconButton(
                       icon: const Icon(Icons.person_add),
                       onPressed: () async {

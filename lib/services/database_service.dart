@@ -1,27 +1,27 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/game_model.dart';
+import '../models/quoridor_logic.dart';
 import '../models/user_model.dart';
+import 'guest_service.dart';
 
 class DatabaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  Future<String> createGame(String hostId, GameSettings settings) async {
+  Future<String> createGame(
+    String hostId,
+    GameSettings settings, {
+    String? invitedUserId,
+  }) async {
     final docRef = _firestore.collection('games').doc();
     final game = GameModel(
       id: docRef.id,
       hostId: hostId,
+      invitedUserId: invitedUserId,
       playerIds: [hostId],
       status: 'waiting',
       settings: settings,
-      gameState: {
-        // Initial Quoridor state
-        'p1': {'x': 4, 'y': 0}, // Top (or bottom) center
-        'p2': {'x': 4, 'y': 8}, // Bottom (or top) center
-        'p1WallsLeft': 10,
-        'p2WallsLeft': 10,
-        'walls': [], // List of {x, y, orientation, owner}
-      },
+      gameState: QuoridorLogic.initialState(settings.seats),
     );
     await docRef.set(game.toMap());
     return docRef.id;
@@ -38,12 +38,32 @@ class DatabaseService {
       
       if (game.status != 'waiting') throw Exception("Game already started");
       if (game.playerIds.contains(userId)) return; // Already joined
-      if (game.playerIds.length >= 2) throw Exception("Game is full");
+      if (game.playerIds.length >= game.settings.seats) {
+        throw Exception("Game is full");
+      }
 
+      final nextIds = [...game.playerIds, userId];
       transaction.update(docRef, {
         'playerIds': FieldValue.arrayUnion([userId]),
-        'status': 'playing', // Start immediately when 2nd player joins for 2p
+        'status': nextIds.length >= game.settings.seats ? 'playing' : 'waiting',
       });
+    });
+  }
+
+  Stream<List<GameModel>> streamIncomingInvites(String userId) {
+    return _firestore
+        .collection('games')
+        .where('invitedUserId', isEqualTo: userId)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => GameModel.fromMap(d.data(), d.id))
+            .where((g) => g.status == 'waiting')
+            .toList());
+  }
+
+  Future<void> declineGameInvite(String gameId) async {
+    await _firestore.collection('games').doc(gameId).update({
+      'invitedUserId': FieldValue.delete(),
     });
   }
 
@@ -81,57 +101,82 @@ class DatabaseService {
       transaction.update(gameRef, {
         'status': 'finished',
         'winnerId': winnerId,
+        'sessionWins.$winnerId': FieldValue.increment(1),
+        'recordedBy': [],
       });
     });
 
-    // 2. Update User Stats (Best Effort)
-    // We do this outside the game transaction so a permission error here doesn't stop the game from ending.
+    // Lifetime head-to-head: this winner beat each other player at the table.
     try {
       final gameSnapshot = await gameRef.get();
       final gameData = gameSnapshot.data()!;
       final playerIds = List<String>.from(gameData['playerIds']);
-      
-      String? loserId;
-      if (playerIds.contains(winnerId)) {
-        loserId = playerIds.firstWhere((id) => id != winnerId, orElse: () => '');
-      }
+      final losers = playerIds.where((id) => id != winnerId);
 
-      // Update Winner Stats
-      await _firestore.collection('users').doc(winnerId).set({
-        'wins': FieldValue.increment(1),
-      }, SetOptions(merge: true)).catchError((e) => print("Error updating winner stats: $e"));
-
-      // Update Loser Stats (Only if permissions allow, otherwise this might fail silently on client)
-      if (loserId != null && loserId.isNotEmpty) {
-        await _firestore.collection('users').doc(loserId).set({
-          'losses': FieldValue.increment(1),
-        }, SetOptions(merge: true)).catchError((e) => print("Error updating loser stats: $e"));
-
-        // Update Series Stats (Shared document, usually allowed if public/shared)
-        final p1 = winnerId.compareTo(loserId) < 0 ? winnerId : loserId;
-        final p2 = winnerId.compareTo(loserId) < 0 ? loserId : winnerId;
-        final seriesId = '${p1}_${p2}';
-        final seriesRef = _firestore.collection('series').doc(seriesId);
-
-        await _firestore.runTransaction((t) async {
-           final sSnap = await t.get(seriesRef);
-           if (!sSnap.exists) {
-             t.set(seriesRef, {
-               'player1Id': p1,
-               'player2Id': p2,
-               'p1Wins': winnerId == p1 ? 1 : 0,
-               'p2Wins': winnerId == p2 ? 1 : 0,
-             });
-           } else {
-             t.update(seriesRef, {
-               winnerId == p1 ? 'p1Wins' : 'p2Wins': FieldValue.increment(1),
-             });
-           }
-        }).catchError((e) => print("Error updating series stats: $e"));
+      for (final loserId in losers) {
+        await _bumpSeries(winnerId, loserId);
       }
     } catch (e) {
       print("Error in stats update: $e");
     }
+  }
+
+  Future<void> _bumpSeries(String winnerId, String loserId) async {
+    final p1 = winnerId.compareTo(loserId) < 0 ? winnerId : loserId;
+    final p2 = winnerId.compareTo(loserId) < 0 ? loserId : winnerId;
+    final seriesRef = _firestore.collection('series').doc('${p1}_$p2');
+
+    await _firestore.runTransaction((t) async {
+      final snap = await t.get(seriesRef);
+      if (!snap.exists) {
+        t.set(seriesRef, {
+          'player1Id': p1,
+          'player2Id': p2,
+          'p1Wins': winnerId == p1 ? 1 : 0,
+          'p2Wins': winnerId == p2 ? 1 : 0,
+        });
+      } else {
+        t.update(seriesRef, {
+          winnerId == p1 ? 'p1Wins' : 'p2Wins': FieldValue.increment(1),
+        });
+      }
+    });
+  }
+
+  /// Each player applies their own career W/L so Firestore user rules hold.
+  Future<void> recordPersonalResult(String gameId, String userId) async {
+    if (userId.isEmpty) return;
+    final gameRef = _firestore.collection('games').doc(gameId);
+
+    final shouldWrite = await _firestore.runTransaction((transaction) async {
+      final snap = await transaction.get(gameRef);
+      if (!snap.exists) return false;
+      final data = snap.data()!;
+      if (data['status'] != 'finished') return false;
+      final recorded = List<String>.from(data['recordedBy'] ?? []);
+      if (recorded.contains(userId)) return false;
+      transaction.update(gameRef, {
+        'recordedBy': FieldValue.arrayUnion([userId]),
+      });
+      return true;
+    });
+
+    if (shouldWrite != true) return;
+
+    final gameSnap = await gameRef.get();
+    final winnerId = gameSnap.data()?['winnerId'] as String?;
+    final won = winnerId == userId;
+
+    if (userId.startsWith('guest_')) {
+      final prefs = await SharedPreferences.getInstance();
+      final key = won ? GuestService.guestWinsKey : GuestService.guestLossesKey;
+      await prefs.setInt(key, (prefs.getInt(key) ?? 0) + 1);
+      return;
+    }
+
+    await _firestore.collection('users').doc(userId).set({
+      won ? 'wins' : 'losses': FieldValue.increment(1),
+    }, SetOptions(merge: true));
   }
 
   Stream<Map<String, dynamic>?> streamSeriesStats(String p1, String p2) {
@@ -146,20 +191,8 @@ class DatabaseService {
   }
 
   Stream<AppUser?> streamUser(String userId) async* {
-    // Check if this is a guest user
     if (userId.startsWith('guest_')) {
-      // For guest users, fetch from local storage
-      final prefs = await SharedPreferences.getInstance();
-      final username = prefs.getString('guest_username') ?? 'Guest${userId.substring(0, 12)}';
-      final photoUrl = prefs.getString('guest_photo_url');
-      
-      yield AppUser(
-        id: userId,
-        email: '',
-        username: username,
-        photoUrl: photoUrl,
-        isGuest: true,
-      );
+      yield await _localGuestProfile(userId);
       return;
     }
     
@@ -172,6 +205,9 @@ class DatabaseService {
 
   Future<void> sendFriendRequest(String currentUserId, String targetUserId) async {
     if (currentUserId == targetUserId) return;
+    if (currentUserId.startsWith('guest_')) {
+      throw Exception('Sign in to send friend requests.');
+    }
     
     // Check if already friends or requested
     final targetUserRef = _firestore.collection('users').doc(targetUserId);
@@ -261,19 +297,9 @@ class DatabaseService {
     
     final users = <AppUser>[];
     
-    // Fetch guest users from local storage
     if (guestIds.isNotEmpty) {
-      final prefs = await SharedPreferences.getInstance();
       for (final guestId in guestIds) {
-        final username = prefs.getString('guest_username') ?? 'Guest${guestId.substring(0, 12)}';
-        final photoUrl = prefs.getString('guest_photo_url');
-        users.add(AppUser(
-          id: guestId,
-          email: '',
-          username: username,
-          photoUrl: photoUrl,
-          isGuest: true,
-        ));
+        users.add(await _localGuestProfile(guestId));
       }
     }
     
@@ -320,20 +346,17 @@ class DatabaseService {
       bool allRequested = playerIds.isNotEmpty && playerIds.every((id) => rematchRequests.contains(id));
       
       if (allRequested) {
-        // Reset Game
+        final settings = GameSettings.fromMap(
+          Map<String, dynamic>.from(data['settings'] ?? {}),
+        );
         transaction.update(gameRef, {
           'status': 'playing',
           'winnerId': null,
           'currentTurnIndex': 0,
-          'gameState': {
-            'p1': {'x': 4, 'y': 0},
-            'p2': {'x': 4, 'y': 8},
-            'walls': [],
-            'p1WallsLeft': 10,
-            'p2WallsLeft': 10,
-          },
+          'gameState': QuoridorLogic.initialState(settings.seats),
           'rematchRequests': [],
           'moveLog': [],
+          'recordedBy': [],
         });
       } else {
         // Just update requests
@@ -354,6 +377,25 @@ class DatabaseService {
         .limit(20)
         .get();
         
-    return snapshot.docs.map((doc) => AppUser.fromMap(doc.data(), doc.id)).toList();
+    return snapshot.docs
+        .map((doc) => AppUser.fromMap(doc.data(), doc.id))
+        .where((user) => !user.isGuest)
+        .toList();
+  }
+
+  /// Device-local `guest_*` ids only carry stats for *this* browser.
+  /// Other guests at the table stay anonymous placeholders.
+  Future<AppUser> _localGuestProfile(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final isLocal = prefs.getString('guest_id') == userId;
+    return AppUser(
+      id: userId,
+      email: '',
+      username: isLocal ? (prefs.getString('guest_username') ?? 'Guest') : 'Guest',
+      photoUrl: isLocal ? prefs.getString('guest_photo_url') : null,
+      wins: isLocal ? (prefs.getInt(GuestService.guestWinsKey) ?? 0) : 0,
+      losses: isLocal ? (prefs.getInt(GuestService.guestLossesKey) ?? 0) : 0,
+      isGuest: true,
+    );
   }
 }

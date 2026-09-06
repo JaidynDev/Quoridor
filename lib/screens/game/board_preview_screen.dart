@@ -49,11 +49,11 @@ class BoardPreviewScreen extends StatelessWidget {
         builder: (context, constraints) {
           final hostBoard = _labeledBoard(
             label: 'Host view (player 1)',
-            child: GameBoard(game: game, userId: 'host', p1User: p1, p2User: p2),
+            child: GameBoard(game: game, userId: 'host', players: [p1, p2]),
           );
           final guestBoard = _labeledBoard(
             label: 'Guest view (player 2)',
-            child: GameBoard(game: game, userId: 'guest', p1User: p1, p2User: p2),
+            child: GameBoard(game: game, userId: 'guest', players: [p1, p2]),
           );
 
           if (constraints.maxWidth > 900) {

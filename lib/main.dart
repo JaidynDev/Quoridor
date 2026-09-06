@@ -7,6 +7,7 @@ import 'models/user_model.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'services/guest_service.dart';
+import 'theme/app_theme.dart';
 import 'screens/auth/auth_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/lobby/lobby_screen.dart';
@@ -44,57 +45,65 @@ class MyApp extends StatelessWidget {
             auth.setGuestService(context.read<GuestService>());
             return auth;
           },
+          dispose: (_, auth) => auth.dispose(),
         ),
         Provider<DatabaseService>(
           create: (_) => DatabaseService(),
         ),
-        StreamProvider<AppUser?>(
-          create: (context) => _createUserStream(context),
-          initialData: null,
+        StreamProvider<AuthStatus>(
+          create: (context) => context.read<AuthService>().status,
+          initialData: const AuthStatus(),
+        ),
+        ProxyProvider<AuthStatus, AppUser?>(
+          update: (_, status, __) => status.user,
         ),
       ],
       child: const AppRouter(),
     );
   }
+}
 
-  Stream<AppUser?> _createUserStream(BuildContext context) async* {
-    final authService = context.read<AuthService>();
-    final guestService = context.read<GuestService>();
-    
-    // Get initial guest user (in case there's no auth)
-    final initialGuest = await guestService.getGuestUser();
-    
-    // Listen to auth state changes
-    await for (final authUser in authService.user) {
-      if (authUser != null) {
-        // Authenticated user - yield them
-        yield authUser;
-      } else {
-        // No authenticated user - use guest
-        yield initialGuest;
-      }
-    }
+class _AuthRefresh extends ChangeNotifier {
+  AppUser? user;
+  bool ready = false;
+
+  void update(AppUser? next, {required bool ready}) {
+    final changed =
+        user?.id != next?.id || user?.isGuest != next?.isGuest || this.ready != ready;
+    user = next;
+    this.ready = ready;
+    if (changed) notifyListeners();
   }
 }
 
-class AppRouter extends StatelessWidget {
+class AppRouter extends StatefulWidget {
   const AppRouter({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final authState = context.watch<AppUser?>();
-    
-    final GoRouter _router = GoRouter(
+  State<AppRouter> createState() => _AppRouterState();
+}
+
+class _AppRouterState extends State<AppRouter> {
+  final _authRefresh = _AuthRefresh();
+  late final GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+    _router = GoRouter(
       initialLocation: '/',
+      refreshListenable: _authRefresh,
       redirect: (context, state) {
+        final authState = _authRefresh.user;
         final path = state.uri.path;
         final isLoggingIn = path == '/login';
         final isPreview = path == '/preview';
 
-        // Allow access if user exists (authenticated or guest) or if on login/preview
-        if (authState == null && !isLoggingIn && !isPreview) return '/login';
-        if (authState != null && isLoggingIn && !authState.isGuest) return '/';
-        
+        if (!_authRefresh.ready) return null;
+        if (isPreview) return null;
+        // Guests land on home. Accounts leave the sign-in screen.
+        if (authState != null && !authState.isGuest && isLoggingIn) return '/';
+
         return null;
       },
       routes: [
@@ -121,19 +130,33 @@ class AppRouter extends StatelessWidget {
         GoRoute(
           path: '/game/:id',
           builder: (context, state) {
-             final id = state.pathParameters['id']!;
-             return GameScreen(gameId: id);
+            final id = state.pathParameters['id']!;
+            return GameScreen(gameId: id);
           },
         ),
       ],
     );
+  }
+
+  @override
+  void dispose() {
+    _router.dispose();
+    _authRefresh.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = context.watch<AuthStatus>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _authRefresh.update(status.user, ready: status.ready);
+      }
+    });
 
     return MaterialApp.router(
       title: 'Quoridor',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(),
       routerConfig: _router,
     );
   }
