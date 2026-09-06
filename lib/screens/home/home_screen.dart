@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import '../../app_version.dart';
 import '../../models/user_model.dart';
 import '../../services/database_service.dart';
 import '../../theme/app_theme.dart';
@@ -148,7 +149,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'Quoridor v1.1.1',
+                    'Quoridor v$kAppVersion',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: AppPalette.inkSoft,
