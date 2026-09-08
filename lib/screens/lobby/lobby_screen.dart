@@ -226,7 +226,7 @@ class _CreateGameDialogState extends State<CreateGameDialog> {
   int _playerCount = 2;
 
   static const _clocks = [
-    (30, '30 seconds', 'Blitz. Move fast or lose the turn.'),
+    (30, '30 seconds', 'Blitz. Time out and your pawn steps forward for you.'),
     (60, '1 minute', 'The standard pace for a friendly game.'),
     (300, '5 minutes', 'Room to plan a proper wall trap.'),
     (0, 'No limit', 'Take as long as you like on every move.'),
