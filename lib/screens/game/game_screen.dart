@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../models/game_model.dart';
+import '../../models/move_clock.dart';
 import '../../models/quoridor_logic.dart';
 import '../../models/user_model.dart';
 import '../../services/database_service.dart';
@@ -45,6 +48,60 @@ class _GameScreenContent extends StatelessWidget {
 
   const _GameScreenContent({required this.game, required this.currentUser});
 
+  bool get _canResign {
+    final id = currentUser?.id;
+    if (id == null || id.isEmpty) return false;
+    if (game.status == 'finished') return false;
+    return game.playerIds.contains(id) && !game.hasResigned(id);
+  }
+
+  void _onMenuSelected(BuildContext context, String value) {
+    switch (value) {
+      case 'share':
+        Share.share('Join my Quoridor game! Code: ${game.id}');
+      case 'copy':
+        Clipboard.setData(ClipboardData(text: game.id));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Code copied!')),
+        );
+      case 'resign':
+        _confirmResign(context);
+    }
+  }
+
+  Future<void> _confirmResign(BuildContext context) async {
+    final db = context.read<DatabaseService>();
+    final id = currentUser?.id ?? '';
+    final onePlayerLeft = game.activePlayerIds.length <= 2;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Resign this match?'),
+        content: Text(
+          onePlayerLeft
+              ? 'Your opponent takes the win and it goes on both your records.'
+              : 'You leave the table and the others play on. Your pawn stays '
+                  'put as a wall of its own.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Keep playing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Resign'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && id.isNotEmpty) {
+      await db.resign(game.id, id);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final db = context.read<DatabaseService>();
@@ -78,22 +135,40 @@ class _GameScreenContent extends StatelessWidget {
                 icon: const Icon(Icons.settings_outlined),
                 onPressed: () => SettingsSheet.show(context),
               ),
-              IconButton(
-                tooltip: 'Share code',
-                icon: const Icon(Icons.share),
-                onPressed: () {
-                  Share.share('Join my Quoridor game! Code: ${game.id}');
-                },
-              ),
-              IconButton(
-                tooltip: 'Copy code',
-                icon: const Icon(Icons.copy),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: game.id));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Code copied!')),
-                  );
-                },
+              PopupMenuButton<String>(
+                tooltip: 'Match options',
+                icon: const Icon(Icons.more_vert),
+                onSelected: (value) => _onMenuSelected(context, value),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'share',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.share, size: 20),
+                      title: Text('Share code'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'copy',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.copy, size: 20),
+                      title: Text('Copy code'),
+                    ),
+                  ),
+                  if (_canResign)
+                    const PopupMenuItem(
+                      value: 'resign',
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.flag_outlined, size: 20),
+                        title: Text('Resign match'),
+                      ),
+                    ),
+                ],
               ),
             ],
           ),
@@ -154,6 +229,9 @@ class _PlayerStrip extends StatelessWidget {
               user: i < players.length ? players[i] : null,
               walls: game.gameState[QuoridorLogic.wallsKey(i)] ?? defaults,
               isTurn: game.status == 'playing' && game.currentTurnIndex == i,
+              hasResigned: i < game.playerIds.length &&
+                  game.hasResigned(game.playerIds[i]),
+              game: game,
             ),
         ],
       ),
@@ -167,6 +245,8 @@ class _SeatChip extends StatelessWidget {
   final AppUser? user;
   final dynamic walls;
   final bool isTurn;
+  final bool hasResigned;
+  final GameModel game;
 
   const _SeatChip({
     required this.index,
@@ -174,49 +254,126 @@ class _SeatChip extends StatelessWidget {
     required this.user,
     required this.walls,
     required this.isTurn,
+    required this.hasResigned,
+    required this.game,
   });
 
   @override
   Widget build(BuildContext context) {
     final color = kPawnColors[index % kPawnColors.length];
     final name = user?.username ?? 'Empty seat';
+    final highlight = isTurn && !hasResigned;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: isTurn ? color.withValues(alpha: 0.22) : AppPalette.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isTurn ? color : AppPalette.hairline,
-          width: isTurn ? 2 : 1,
+    return Opacity(
+      opacity: hasResigned ? 0.55 : 1,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: highlight ? color.withValues(alpha: 0.22) : AppPalette.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: highlight ? color : AppPalette.hairline,
+            width: highlight ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: 10,
+              backgroundColor: color,
+              backgroundImage:
+                  user?.photoUrl != null ? NetworkImage(user!.photoUrl!) : null,
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    decoration:
+                        hasResigned ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+                Text(
+                  hasResigned ? '$side · resigned' : '$side · $walls walls',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppPalette.inkSoft,
+                        fontSize: 11,
+                      ),
+                ),
+              ],
+            ),
+            if (highlight) TurnClock(game: game),
+          ],
         ),
       ),
+    );
+  }
+}
+
+/// Counts down the per-move limit for whoever is on turn.
+class TurnClock extends StatefulWidget {
+  final GameModel game;
+
+  /// Overridable so tests can drive the countdown without waiting it out.
+  final DateTime Function() now;
+
+  const TurnClock({super.key, required this.game, this.now = DateTime.now});
+
+  @override
+  State<TurnClock> createState() => _TurnClockState();
+}
+
+class _TurnClockState extends State<TurnClock> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => setState(() {}),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final left = MoveClock.remaining(widget.game, now: widget.now());
+    if (left == null) return const SizedBox.shrink();
+
+    final seconds = left.inSeconds;
+    final color = seconds <= 5
+        ? const Color(0xFFC0392B)
+        : seconds <= 15
+            ? const Color(0xFFB9770E)
+            : AppPalette.inkSoft;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 10),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircleAvatar(
-            radius: 10,
-            backgroundColor: color,
-            backgroundImage:
-                user?.photoUrl != null ? NetworkImage(user!.photoUrl!) : null,
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                name,
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-              ),
-              Text(
-                '$side · $walls walls',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppPalette.inkSoft,
-                      fontSize: 11,
-                    ),
-              ),
-            ],
+          Icon(Icons.timer_outlined, size: 14, color: color),
+          const SizedBox(width: 3),
+          Text(
+            MoveClock.label(left),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
         ],
       ),
