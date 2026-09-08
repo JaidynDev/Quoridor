@@ -7,6 +7,7 @@ import '../../models/user_model.dart';
 import '../../services/database_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/how_to_play.dart';
+import '../../widgets/settings_sheet.dart';
 import '../../widgets/user_profile_dialog.dart';
 import '../auth/auth_screen.dart';
 
@@ -146,6 +147,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: 'Board preview',
                     subtitle: 'Look over the 3D board from either side',
                     onTap: () => context.push('/preview'),
+                  ),
+                  const SizedBox(height: 12),
+                  _MenuTile(
+                    icon: Icons.settings_outlined,
+                    title: 'Settings',
+                    subtitle: 'Confirm wall placement, move hints and haptics',
+                    onTap: () => SettingsSheet.show(context),
                   ),
                   const SizedBox(height: 24),
                   Text(

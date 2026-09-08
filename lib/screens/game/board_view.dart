@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../models/game_model.dart';
 import '../../models/quoridor_logic.dart';
 import '../../models/user_model.dart';
 import '../../services/database_service.dart';
+import '../../services/settings_service.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/user_profile_dialog.dart';
 import 'board_3d.dart';
 
@@ -27,6 +30,13 @@ class _GameBoardState extends State<GameBoard>
     with SingleTickerProviderStateMixin {
   Wall? _draggedWall;
   bool _isValidPlacement = false;
+
+  /// Set once a wall drag ends and the player still has to commit it.
+  bool _wallAwaitingConfirm = false;
+
+  /// Square picked but not yet committed.
+  Position? _pendingMove;
+
   late final AnimationController _pulse;
 
   int get _seats => widget.game.settings.seats;
@@ -42,6 +52,19 @@ class _GameBoardState extends State<GameBoard>
   }
 
   @override
+  void didUpdateWidget(GameBoard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The table moved on (our turn ended, or someone else played), so any
+    // half-finished choice of ours is stale.
+    final turnChanged =
+        oldWidget.game.currentTurnIndex != widget.game.currentTurnIndex;
+    final statusChanged = oldWidget.game.status != widget.game.status;
+    if (turnChanged || statusChanged) {
+      _resetPending();
+    }
+  }
+
+  @override
   void dispose() {
     _pulse.dispose();
     super.dispose();
@@ -52,8 +75,30 @@ class _GameBoardState extends State<GameBoard>
     return null;
   }
 
+  void _resetPending() {
+    if (_draggedWall == null && _pendingMove == null && !_wallAwaitingConfirm) {
+      return;
+    }
+    setState(() {
+      _draggedWall = null;
+      _isValidPlacement = false;
+      _wallAwaitingConfirm = false;
+      _pendingMove = null;
+    });
+  }
+
+  void _buzz({bool strong = false}) {
+    if (!context.read<SettingsService>().haptics) return;
+    if (strong) {
+      HapticFeedback.mediumImpact();
+    } else {
+      HapticFeedback.selectionClick();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsService>();
     final state = widget.game.gameState;
     final pawns = QuoridorLogic.pawnsFromState(state, _seats);
     final walls = (state['walls'] as List? ?? [])
@@ -81,6 +126,7 @@ class _GameBoardState extends State<GameBoard>
     }
 
     final canPlaceWall = isMyTurn && wallsLeft > 0;
+    final pendingMove = _pendingMove;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -104,7 +150,7 @@ class _GameBoardState extends State<GameBoard>
                   ? (details) => _updateGhostWall(
                       details.localPosition, proj, walls, pawns)
                   : null,
-              onPanEnd: canPlaceWall ? (_) => _finalizeWallPlacement() : null,
+              onPanEnd: canPlaceWall ? (_) => _endWallDrag() : null,
               onPanCancel: canPlaceWall ? _clearGhostWall : null,
               child: Stack(
                 clipBehavior: Clip.none,
@@ -114,14 +160,42 @@ class _GameBoardState extends State<GameBoard>
                       painter: BoardPainter(
                         proj: proj,
                         walls: walls,
-                        validMoves: validMoves,
+                        validMoves:
+                            settings.moveHints ? validMoves : const {},
                         ghostWall: _draggedWall,
                         ghostValid: _isValidPlacement,
+                        pendingMove: pendingMove,
                         pulse: pulse,
                       ),
                     ),
                   ),
                   ..._buildPieces(proj, pawns, pulse),
+                  if (_wallAwaitingConfirm && _draggedWall != null)
+                    Positioned(
+                      left: 12,
+                      right: 12,
+                      bottom: 16,
+                      child: _ConfirmBar(
+                        prompt: 'Wall ready. Drag to nudge it.',
+                        confirmLabel: 'Place wall',
+                        confirmIcon: Icons.fence_outlined,
+                        onConfirm: _confirmPendingWall,
+                        onCancel: _clearGhostWall,
+                      ),
+                    ),
+                  if (pendingMove != null)
+                    Positioned(
+                      left: 12,
+                      right: 12,
+                      bottom: 16,
+                      child: _ConfirmBar(
+                        prompt: 'Step to this square?',
+                        confirmLabel: 'Move here',
+                        confirmIcon: Icons.directions_walk,
+                        onConfirm: _confirmPendingMove,
+                        onCancel: () => setState(() => _pendingMove = null),
+                      ),
+                    ),
                 ],
               ),
             );
@@ -194,7 +268,24 @@ class _GameBoardState extends State<GameBoard>
     if (board == null) return;
 
     final target = Position(board.dx.floor(), board.dy.floor());
-    if (!validMoves.contains(target)) return;
+
+    // Tapping the picked square again is the second half of a confirmed move.
+    if (_pendingMove == target) {
+      _confirmPendingMove();
+      return;
+    }
+
+    if (!validMoves.contains(target)) {
+      if (_pendingMove != null) setState(() => _pendingMove = null);
+      return;
+    }
+
+    if (context.read<SettingsService>().confirmMoves) {
+      setState(() => _pendingMove = target);
+      _buzz();
+      return;
+    }
+
     _makeMove(target);
   }
 
@@ -233,11 +324,17 @@ class _GameBoardState extends State<GameBoard>
     final candidate = Wall(wallX, wallY, orientation);
     final valid =
         QuoridorLogic.isValidWall(candidate, walls, pawns, _seatsInfo);
-    if (candidate == _draggedWall && valid == _isValidPlacement) return;
+    if (candidate == _draggedWall &&
+        valid == _isValidPlacement &&
+        _pendingMove == null) {
+      return;
+    }
 
     setState(() {
       _draggedWall = candidate;
       _isValidPlacement = valid;
+      _wallAwaitingConfirm = false;
+      _pendingMove = null;
     });
   }
 
@@ -254,16 +351,43 @@ class _GameBoardState extends State<GameBoard>
     setState(() {
       _draggedWall = null;
       _isValidPlacement = false;
+      _wallAwaitingConfirm = false;
     });
   }
 
-  Future<void> _finalizeWallPlacement() async {
+  void _endWallDrag() {
     final wall = _draggedWall;
-    final wasValid = _isValidPlacement;
-    _clearGhostWall();
-    if (wall != null && wasValid) {
-      await _placeWall(wall);
+    if (wall == null) return;
+
+    if (!_isValidPlacement) {
+      _clearGhostWall();
+      return;
     }
+
+    if (context.read<SettingsService>().confirmWalls) {
+      setState(() => _wallAwaitingConfirm = true);
+      _buzz();
+      return;
+    }
+
+    _clearGhostWall();
+    _placeWall(wall);
+  }
+
+  Future<void> _confirmPendingWall() async {
+    final wall = _draggedWall;
+    if (wall == null || !_isValidPlacement) return;
+    _clearGhostWall();
+    _buzz(strong: true);
+    await _placeWall(wall);
+  }
+
+  Future<void> _confirmPendingMove() async {
+    final target = _pendingMove;
+    if (target == null) return;
+    setState(() => _pendingMove = null);
+    _buzz(strong: true);
+    await _makeMove(target);
   }
 
   Future<void> _makeMove(Position newPos) async {
@@ -312,6 +436,72 @@ class _GameBoardState extends State<GameBoard>
     final nextTurn = (widget.game.currentTurnIndex + 1) % _seats;
     await db.updateGameState(widget.game.id, newState, nextTurn,
         logEntry: logEntry);
+  }
+}
+
+/// Bottom bar that commits or drops a half-made move.
+class _ConfirmBar extends StatelessWidget {
+  final String prompt;
+  final String confirmLabel;
+  final IconData confirmIcon;
+  final VoidCallback onConfirm;
+  final VoidCallback onCancel;
+
+  const _ConfirmBar({
+    required this.prompt,
+    required this.confirmLabel,
+    required this.confirmIcon,
+    required this.onConfirm,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+        decoration: BoxDecoration(
+          color: AppPalette.ink.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          alignment: WrapAlignment.center,
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            Text(
+              prompt,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextButton(
+                  onPressed: onCancel,
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    minimumSize: const Size(0, 40),
+                  ),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 4),
+                FilledButton.icon(
+                  onPressed: onConfirm,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
+                  icon: Icon(confirmIcon, size: 18),
+                  label: Text(confirmLabel),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
