@@ -6,7 +6,9 @@ import '../models/user_model.dart';
 import 'guest_service.dart';
 
 class DatabaseService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // Resolved on first use so widget tests can subclass this without a live
+  // Firebase app in the background.
+  late final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<String> createGame(
     String hostId,

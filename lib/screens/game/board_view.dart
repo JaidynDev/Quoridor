@@ -151,7 +151,7 @@ class _GameBoardState extends State<GameBoard>
                       details.localPosition, proj, walls, pawns)
                   : null,
               onPanEnd: canPlaceWall ? (_) => _endWallDrag() : null,
-              onPanCancel: canPlaceWall ? _clearGhostWall : null,
+              onPanCancel: canPlaceWall ? _cancelWallDrag : null,
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
@@ -344,6 +344,13 @@ class _GameBoardState extends State<GameBoard>
       return QuoridorLogic.boardSize - 2;
     }
     return value;
+  }
+
+  /// A wall waiting on the confirm button has to survive the pan recogniser
+  /// losing the arena, which is what a tap on that button looks like here.
+  void _cancelWallDrag() {
+    if (_wallAwaitingConfirm) return;
+    _clearGhostWall();
   }
 
   void _clearGhostWall() {
