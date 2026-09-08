@@ -7,6 +7,7 @@ import '../../models/quoridor_logic.dart';
 import '../../models/user_model.dart';
 import '../../services/database_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/settings_sheet.dart';
 import 'board_3d.dart';
 import 'board_view.dart';
 import 'game_result_screen.dart';
@@ -72,6 +73,11 @@ class _GameScreenContent extends StatelessWidget {
               ],
             ),
             actions: [
+              IconButton(
+                tooltip: 'Settings',
+                icon: const Icon(Icons.settings_outlined),
+                onPressed: () => SettingsSheet.show(context),
+              ),
               IconButton(
                 tooltip: 'Share code',
                 icon: const Icon(Icons.share),
