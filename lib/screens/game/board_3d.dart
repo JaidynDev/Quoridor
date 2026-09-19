@@ -202,6 +202,9 @@ class BoardPainter extends CustomPainter {
   final Set<Position> validMoves;
   final Wall? ghostWall;
   final bool ghostValid;
+
+  /// Square the player has picked but not committed yet.
+  final Position? pendingMove;
   final double pulse;
 
   BoardPainter({
@@ -211,6 +214,7 @@ class BoardPainter extends CustomPainter {
     required this.pulse,
     this.ghostWall,
     this.ghostValid = true,
+    this.pendingMove,
   });
 
   // Direction towards the light, used to shade every box face.
@@ -340,11 +344,12 @@ class BoardPainter extends CustomPainter {
   }
 
   void _paintMoveHints(Canvas canvas) {
-    if (validMoves.isEmpty) return;
+    if (validMoves.isEmpty && pendingMove == null) return;
     const g = 0.06;
     final glow = 0.55 + 0.45 * pulse;
 
     for (final move in validMoves) {
+      if (move == pendingMove) continue;
       final tile = _poly([
         proj.project(move.x + g, move.y + g, 0),
         proj.project(move.x + 1 - g, move.y + g, 0),
@@ -375,6 +380,28 @@ class BoardPainter extends CustomPainter {
       );
       canvas.drawCircle(centre, r * 0.55, Paint()..color = Colors.white70);
     }
+
+    final pending = pendingMove;
+    if (pending == null) return;
+
+    final tile = _poly([
+      proj.project(pending.x + g, pending.y + g, 0),
+      proj.project(pending.x + 1 - g, pending.y + g, 0),
+      proj.project(pending.x + 1 - g, pending.y + 1 - g, 0),
+      proj.project(pending.x + g, pending.y + 1 - g, 0),
+    ]);
+
+    canvas.drawPath(
+      tile,
+      Paint()..color = kMoveAccent.withValues(alpha: 0.42 + 0.16 * pulse),
+    );
+    canvas.drawPath(
+      tile,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.6
+        ..color = Colors.white.withValues(alpha: 0.85),
+    );
   }
 
   void _paintWalls(Canvas canvas) {
@@ -562,6 +589,7 @@ class BoardPainter extends CustomPainter {
       old.pulse != pulse ||
       old.ghostWall != ghostWall ||
       old.ghostValid != ghostValid ||
+      old.pendingMove != pendingMove ||
       old.walls.length != walls.length ||
       !setEquals(old.validMoves, validMoves);
 }

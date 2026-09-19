@@ -7,6 +7,7 @@ import 'models/user_model.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'services/guest_service.dart';
+import 'services/settings_service.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth/auth_screen.dart';
 import 'screens/home/home_screen.dart';
@@ -49,6 +50,9 @@ class MyApp extends StatelessWidget {
         ),
         Provider<DatabaseService>(
           create: (_) => DatabaseService(),
+        ),
+        ChangeNotifierProvider<SettingsService>(
+          create: (_) => SettingsService()..load(),
         ),
         StreamProvider<AuthStatus>(
           create: (context) => context.read<AuthService>().status,
