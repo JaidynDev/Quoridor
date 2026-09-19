@@ -74,10 +74,16 @@ class DatabaseService {
   }
 
   Stream<GameModel?> streamGame(String gameId) {
-    return _firestore.collection('games').doc(gameId).snapshots().map((doc) {
-      if (!doc.exists) return null;
-      return GameModel.fromMap(doc.data()!, doc.id);
-    });
+    return _firestore
+        .collection('games')
+        .doc(gameId)
+        .snapshots()
+        // While offline Firestore answers a listener straight from cache, and
+        // for a match it has never seen that answer is "does not exist". That
+        // is not the same as the match being gone, so it must not be passed on
+        // as a null or a shared link would read as dead on a slow connection.
+        .where((doc) => doc.exists || !doc.metadata.isFromCache)
+        .map((doc) => doc.exists ? GameModel.fromMap(doc.data()!, doc.id) : null);
   }
 
   Future<void> updateGameState(String gameId, Map<String, dynamic> newState, int nextTurn, {Map<String, dynamic>? logEntry}) async {
