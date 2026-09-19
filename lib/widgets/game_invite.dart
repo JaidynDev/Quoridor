@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../models/game_model.dart';
 import '../models/user_model.dart';
 import '../services/database_service.dart';
+import '../services/game_link.dart';
 
 Future<void> inviteFriendToGame(
   BuildContext context, {
@@ -22,16 +23,20 @@ Future<void> inviteFriendToGame(
       GameSettings(isPrivate: true, name: 'Match with ${invitee.username}'),
       invitedUserId: invitee.id,
     );
-    await Clipboard.setData(ClipboardData(text: gameId));
+    final link = buildGameLink(gameId);
+    await Clipboard.setData(ClipboardData(text: link));
     try {
       await SharePlus.instance.share(
-        ShareParams(text: 'Join me in Quoridor, ${invitee.username}! Code: $gameId'),
+        ShareParams(
+          subject: 'Quoridor match',
+          text: 'Join me in Quoridor, ${invitee.username}: $link',
+        ),
       );
     } catch (_) {}
     if (!context.mounted) return;
     messenger.showSnackBar(
       SnackBar(
-        content: Text('Invite sent to ${invitee.username}. Game code copied.'),
+        content: Text('Invite sent to ${invitee.username}. Link copied.'),
       ),
     );
     if (Navigator.of(context, rootNavigator: true).canPop()) {
