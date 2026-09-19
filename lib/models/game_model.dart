@@ -77,6 +77,13 @@ class GameModel {
   final Map<String, int> sessionWins;
   final List<String> recordedBy;
 
+  /// Server time the current turn began, used to run the per-move clock.
+  final DateTime? turnStartedAt;
+
+  /// Players who walked away. They keep their pawn on the board as an
+  /// obstacle but are skipped in the turn order.
+  final List<String> resignedIds;
+
   GameModel({
     required this.id,
     required this.hostId,
@@ -91,6 +98,8 @@ class GameModel {
     this.rematchRequests = const [],
     this.sessionWins = const {},
     this.recordedBy = const [],
+    this.turnStartedAt,
+    this.resignedIds = const [],
   });
 
   Map<String, dynamic> toMap() {
@@ -107,6 +116,7 @@ class GameModel {
       'rematchRequests': rematchRequests,
       'sessionWins': sessionWins,
       'recordedBy': recordedBy,
+      'resignedIds': resignedIds,
     };
   }
 
@@ -125,6 +135,8 @@ class GameModel {
       rematchRequests: List<String>.from(map['rematchRequests'] ?? []),
       sessionWins: _intMap(map['sessionWins']),
       recordedBy: List<String>.from(map['recordedBy'] ?? []),
+      turnStartedAt: _dateTime(map['turnStartedAt']),
+      resignedIds: List<String>.from(map['resignedIds'] ?? []),
     );
   }
 
@@ -135,6 +147,17 @@ class GameModel {
 
   int sessionLossesFor(String playerId) =>
       (sessionGames - sessionWinsFor(playerId)).clamp(0, sessionGames);
+
+  bool hasResigned(String playerId) => resignedIds.contains(playerId);
+
+  /// Seats to skip in the turn order.
+  Set<int> get resignedSeats => {
+        for (var i = 0; i < playerIds.length; i++)
+          if (resignedIds.contains(playerIds[i])) i,
+      };
+
+  List<String> get activePlayerIds =>
+      [for (final id in playerIds) if (!resignedIds.contains(id)) id];
 }
 
 /// Lifetime head-to-head pulled from a `series/{id1_id2}` document.
@@ -162,6 +185,20 @@ String afterActionPlayerName(String? username, {required bool isYou}) {
   final base =
       (username != null && username.trim().isNotEmpty) ? username.trim() : 'Guest';
   return isYou ? '$base (You)' : base;
+}
+
+/// Accepts a Firestore `Timestamp` without dragging the plugin into the
+/// models, so this layer stays testable on the Dart VM.
+DateTime? _dateTime(dynamic raw) {
+  if (raw == null) return null;
+  if (raw is DateTime) return raw;
+  if (raw is int) return DateTime.fromMillisecondsSinceEpoch(raw);
+  try {
+    final converted = (raw as dynamic).toDate();
+    return converted is DateTime ? converted : null;
+  } catch (_) {
+    return null;
+  }
 }
 
 Map<String, int> _intMap(dynamic raw) {

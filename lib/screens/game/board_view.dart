@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../models/game_model.dart';
+import '../../models/move_clock.dart';
 import '../../models/quoridor_logic.dart';
 import '../../models/user_model.dart';
 import '../../services/database_service.dart';
@@ -38,6 +41,10 @@ class _GameBoardState extends State<GameBoard>
   Position? _pendingMove;
 
   late final AnimationController _pulse;
+  Timer? _clockWatch;
+
+  /// Turn we already forced along, so the clock only fires once per turn.
+  int? _timedOutSeat;
 
   int get _seats => widget.game.settings.seats;
   List<PlayerSeat> get _seatsInfo => QuoridorLogic.seatsFor(_seats);
@@ -49,6 +56,10 @@ class _GameBoardState extends State<GameBoard>
       vsync: this,
       duration: const Duration(milliseconds: 1600),
     )..repeat(reverse: true);
+    _clockWatch = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _checkMoveClock(),
+    );
   }
 
   @override
@@ -59,13 +70,19 @@ class _GameBoardState extends State<GameBoard>
     final turnChanged =
         oldWidget.game.currentTurnIndex != widget.game.currentTurnIndex;
     final statusChanged = oldWidget.game.status != widget.game.status;
+    final clockRestarted =
+        oldWidget.game.turnStartedAt != widget.game.turnStartedAt;
     if (turnChanged || statusChanged) {
       _resetPending();
+    }
+    if (turnChanged || clockRestarted) {
+      _timedOutSeat = null;
     }
   }
 
   @override
   void dispose() {
+    _clockWatch?.cancel();
     _pulse.dispose();
     super.dispose();
   }
@@ -87,6 +104,79 @@ class _GameBoardState extends State<GameBoard>
     });
   }
 
+  int _nextTurnFrom(int seat) => QuoridorLogic.nextActiveSeat(
+        seat,
+        _seats,
+        out: widget.game.resignedSeats,
+      );
+
+  /// Fires when a player's move clock runs out. The player on turn applies
+  /// their own timeout; the host steps in once the turn is clearly abandoned,
+  /// so a closed tab cannot freeze the table.
+  void _checkMoveClock() {
+    final game = widget.game;
+    if (game.status != 'playing') return;
+    if (!MoveClock.hasExpired(game)) return;
+
+    final seat = game.currentTurnIndex;
+    if (_timedOutSeat == seat) return;
+    if (seat < 0 || seat >= game.playerIds.length) return;
+
+    final myIndex = game.playerIds.indexOf(widget.userId);
+    final isMine = myIndex == seat;
+    final canForce =
+        isMine || (widget.userId == game.hostId && MoveClock.isAbandoned(game));
+    if (!canForce) return;
+
+    _timedOutSeat = seat;
+    _applyTimeout(seat);
+  }
+
+  /// A timed-out player is walked one square along their shortest route
+  /// rather than losing the match over a slow turn.
+  Future<void> _applyTimeout(int seat) async {
+    final game = widget.game;
+    final db = context.read<DatabaseService>();
+    final pawns = QuoridorLogic.pawnsFromState(game.gameState, _seats);
+    final walls = (game.gameState['walls'] as List? ?? [])
+        .map((w) => Wall(w['x'], w['y'], w['orientation']))
+        .toList();
+    final others = [
+      for (var i = 0; i < pawns.length; i++)
+        if (i != seat) pawns[i],
+    ];
+
+    final step = QuoridorLogic.stepTowardGoal(
+      pawns[seat],
+      walls,
+      others,
+      _seatsInfo[seat],
+    );
+
+    _resetPending();
+
+    final newState = Map<String, dynamic>.from(game.gameState);
+    if (step != null) {
+      newState[QuoridorLogic.pawnKey(seat)] = step.toMap();
+    }
+
+    await db.updateGameState(
+      game.id,
+      newState,
+      _nextTurnFrom(seat),
+      logEntry: {
+        'playerId': game.playerIds[seat],
+        'type': 'timeout',
+        if (step != null) 'to': step.toMap(),
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      },
+    );
+
+    if (step != null && _seatsInfo[seat].reachedGoal(step)) {
+      await db.setWinner(game.id, game.playerIds[seat]);
+    }
+  }
+
   void _buzz({bool strong = false}) {
     if (!context.read<SettingsService>().haptics) return;
     if (strong) {
@@ -106,7 +196,9 @@ class _GameBoardState extends State<GameBoard>
         .toList();
 
     final myIndex = widget.game.playerIds.indexOf(widget.userId);
-    final isMyTurn = widget.game.currentTurnIndex == myIndex && myIndex >= 0;
+    final isMyTurn = widget.game.currentTurnIndex == myIndex &&
+        myIndex >= 0 &&
+        !widget.game.hasResigned(widget.userId);
     final wallsLeft = myIndex >= 0
         ? (state[QuoridorLogic.wallsKey(myIndex)] ??
             QuoridorLogic.wallsEach(_seats)) as int
@@ -411,7 +503,7 @@ class _GameBoardState extends State<GameBoard>
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
 
-    final nextTurn = (widget.game.currentTurnIndex + 1) % _seats;
+    final nextTurn = _nextTurnFrom(widget.game.currentTurnIndex);
     await db.updateGameState(widget.game.id, newState, nextTurn,
         logEntry: logEntry);
 
@@ -440,7 +532,7 @@ class _GameBoardState extends State<GameBoard>
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
 
-    final nextTurn = (widget.game.currentTurnIndex + 1) % _seats;
+    final nextTurn = _nextTurnFrom(widget.game.currentTurnIndex);
     await db.updateGameState(widget.game.id, newState, nextTurn,
         logEntry: logEntry);
   }

@@ -168,6 +168,73 @@ class QuoridorLogic {
     ];
   }
 
+  /// Next seat that is still playing, skipping anyone who walked away.
+  /// Falls back to [from] when nobody else is left.
+  static int nextActiveSeat(int from, int seats, {Set<int> out = const {}}) {
+    if (seats <= 0) return from;
+    for (var step = 1; step <= seats; step++) {
+      final candidate = (from + step) % seats;
+      if (!out.contains(candidate)) return candidate;
+    }
+    return from;
+  }
+
+  /// The step a shortest route to this seat's goal would take, used when a
+  /// player's clock runs out. Null only if every neighbour is unreachable.
+  static Position? stepTowardGoal(
+    Position from,
+    List<Wall> walls,
+    List<Position> others,
+    PlayerSeat seat,
+  ) {
+    final legal = getValidMoves(from, walls, others);
+    if (legal.isEmpty) return null;
+
+    final distances = _goalDistances(seat, walls);
+    Position? best;
+    int? bestDistance;
+
+    for (final move in legal) {
+      final distance = distances[move];
+      if (distance == null) continue;
+      if (bestDistance == null || distance < bestDistance) {
+        bestDistance = distance;
+        best = move;
+      }
+    }
+
+    // Every legal step walled off from the goal should be impossible, but
+    // moving beats stalling the table if it ever happens.
+    return best ?? legal.first;
+  }
+
+  /// Breadth-first sweep out from the goal row, ignoring pawns.
+  static Map<Position, int> _goalDistances(PlayerSeat seat, List<Wall> walls) {
+    final distances = <Position, int>{};
+    final queue = Queue<Position>();
+
+    for (var i = 0; i < boardSize; i++) {
+      final cell = seat.goalIsY
+          ? Position(i, seat.goalValue)
+          : Position(seat.goalValue, i);
+      distances[cell] = 0;
+      queue.add(cell);
+    }
+
+    while (queue.isNotEmpty) {
+      final current = queue.removeFirst();
+      final next = distances[current]! + 1;
+      for (final neighbor in getValidMoves(current, walls, const [],
+          ignoreOtherPlayers: true)) {
+        if (distances.containsKey(neighbor)) continue;
+        distances[neighbor] = next;
+        queue.add(neighbor);
+      }
+    }
+
+    return distances;
+  }
+
   static bool isValidWall(
     Wall newWall,
     List<Wall> existingWalls,

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/game_model.dart';
+import '../models/match_flow.dart';
 import '../models/quoridor_logic.dart';
 import '../models/user_model.dart';
 import 'guest_service.dart';
@@ -45,9 +46,12 @@ class DatabaseService {
       }
 
       final nextIds = [...game.playerIds, userId];
+      final starting = nextIds.length >= game.settings.seats;
       transaction.update(docRef, {
         'playerIds': FieldValue.arrayUnion([userId]),
-        'status': nextIds.length >= game.settings.seats ? 'playing' : 'waiting',
+        'status': starting ? 'playing' : 'waiting',
+        // The first clock only starts once every seat is filled.
+        if (starting) 'turnStartedAt': FieldValue.serverTimestamp(),
       });
     });
   }
@@ -80,6 +84,7 @@ class DatabaseService {
     final updates = <String, dynamic>{
       'gameState': newState,
       'currentTurnIndex': nextTurn,
+      'turnStartedAt': FieldValue.serverTimestamp(),
     };
     
     if (logEntry != null) {
@@ -89,6 +94,48 @@ class DatabaseService {
     await _firestore.collection('games').doc(gameId).update(updates);
   }
   
+  /// Takes a player out of the running. The others play on, unless only one
+  /// of them is left, in which case they take the win.
+  Future<void> resign(String gameId, String userId) async {
+    if (userId.isEmpty) return;
+    final gameRef = _firestore.collection('games').doc(gameId);
+
+    final outcome = await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(gameRef);
+      if (!snapshot.exists) return ResignationOutcome.noop;
+
+      final data = snapshot.data()!;
+      if (data['status'] == 'finished') return ResignationOutcome.noop;
+
+      final result = resolveResignation(
+        playerIds: List<String>.from(data['playerIds'] ?? []),
+        resignedIds: List<String>.from(data['resignedIds'] ?? []),
+        resignerId: userId,
+        currentTurnIndex: data['currentTurnIndex'] ?? 0,
+      );
+      if (!result.changed) return result;
+
+      transaction.update(gameRef, {
+        'resignedIds': result.resignedIds,
+        'currentTurnIndex': result.nextTurnIndex,
+        'turnStartedAt': FieldValue.serverTimestamp(),
+        'moveLog': FieldValue.arrayUnion([
+          {
+            'playerId': userId,
+            'type': 'resign',
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          }
+        ]),
+      });
+      return result;
+    });
+
+    final winnerId = outcome.winnerId;
+    if (outcome.changed && winnerId != null) {
+      await setWinner(gameId, winnerId);
+    }
+  }
+
   Future<void> setWinner(String gameId, String winnerId) async {
     final gameRef = _firestore.collection('games').doc(gameId);
 
@@ -359,6 +406,8 @@ class DatabaseService {
           'rematchRequests': [],
           'moveLog': [],
           'recordedBy': [],
+          'resignedIds': [],
+          'turnStartedAt': FieldValue.serverTimestamp(),
         });
       } else {
         // Just update requests

@@ -44,6 +44,11 @@ class HowToPlaySheet extends StatelessWidget {
       'Hop the standoff',
       'When pawns meet face to face, jump straight over — or step diagonal if that landing is blocked.',
     ),
+    (
+      Icons.timer_outlined,
+      'Mind the clock',
+      'If the table set a time per move, running out steps your pawn along its shortest route for you.',
+    ),
   ];
 
   @override
