@@ -12,6 +12,14 @@ class AuthStatus {
 }
 
 class AuthService {
+  /// Firestore futures wait for the server with no deadline of their own, so
+  /// every call made while deciding who the player is gets one. Without this
+  /// a single unreachable read leaves the whole app on a spinner, which is
+  /// what someone opening a shared match link would land on.
+  static const Duration _readGrace = Duration(seconds: 4);
+  static const Duration _signInGrace = Duration(seconds: 8);
+  static const Duration _bootstrapGrace = Duration(seconds: 12);
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   GuestService? _guestService;
@@ -19,6 +27,7 @@ class AuthService {
   final _out = StreamController<AppUser?>.broadcast();
   final _firstEvent = Completer<void>();
   StreamSubscription<User?>? _authSub;
+  Timer? _bootstrapGuard;
   bool _listening = false;
   bool _autoGuestBusy = false;
   AppUser? _current;
@@ -45,6 +54,11 @@ class AuthService {
   void _ensureListening() {
     if (_listening) return;
     _listening = true;
+
+    // Last resort: if Firebase never reports in, open the app as a
+    // device-local guest rather than leaving the player on a spinner.
+    _bootstrapGuard = Timer(_bootstrapGrace, _fallBackToLocalGuest);
+
     _authSub = _auth.authStateChanges().listen((firebaseUser) async {
       try {
         if (firebaseUser == null) {
@@ -71,6 +85,21 @@ class AuthService {
     });
   }
 
+  Future<void> _fallBackToLocalGuest() async {
+    if (_firstEvent.isCompleted) return;
+    final guestService = _guestService;
+    if (guestService == null) {
+      _emit(null);
+      return;
+    }
+    try {
+      _localGuestActive = true;
+      _emit(await guestService.getGuestUser());
+    } catch (_) {
+      _emit(null);
+    }
+  }
+
   void _emit(AppUser? user) {
     _current = user;
     if (!_out.isClosed) _out.add(user);
@@ -85,9 +114,17 @@ class AuthService {
     _localGuestActive = false;
     if (user.isAnonymous) return _guestFromAuth(user);
 
-    final doc = await _firestore.collection('users').doc(user.uid).get();
-    if (doc.exists) {
-      return AppUser.fromMap(doc.data()!, user.uid);
+    try {
+      final doc = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get()
+          .timeout(_readGrace);
+      if (doc.exists) {
+        return AppUser.fromMap(doc.data()!, user.uid);
+      }
+    } catch (_) {
+      // Better to sign them in with a bare profile than to hang.
     }
     return AppUser(id: user.uid, email: user.email ?? '', username: 'User');
   }
@@ -97,7 +134,11 @@ class AuthService {
     var wins = local?.wins ?? 0;
     var losses = local?.losses ?? 0;
     try {
-      final doc = await _firestore.collection('users').doc(user.uid).get();
+      final doc = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get()
+          .timeout(_readGrace);
       if (doc.exists) {
         wins = doc.data()?['wins'] ?? wins;
         losses = doc.data()?['losses'] ?? losses;
@@ -112,17 +153,23 @@ class AuthService {
       losses: losses,
       isGuest: true,
     );
-    try {
-      await _firestore.collection('users').doc(user.uid).set(
-        {
-          'email': '',
-          'username': profile.username,
-          'photoUrl': profile.photoUrl,
-          'isGuest': true,
-        },
-        SetOptions(merge: true),
-      );
-    } catch (_) {}
+    // Saving the profile is not worth waiting on: the guest can start playing
+    // while it lands, and a stalled write must not hold up the session.
+    unawaited(
+      _firestore
+          .collection('users')
+          .doc(user.uid)
+          .set(
+            {
+              'email': '',
+              'username': profile.username,
+              'photoUrl': profile.photoUrl,
+              'isGuest': true,
+            },
+            SetOptions(merge: true),
+          )
+          .catchError((Object _) {}),
+    );
     return profile;
   }
 
@@ -177,7 +224,7 @@ class AuthService {
   /// Explicit guest session for playing without an account.
   Future<AppUser> playAsGuest() async {
     try {
-      final cred = await _auth.signInAnonymously();
+      final cred = await _auth.signInAnonymously().timeout(_signInGrace);
       _localGuestActive = false;
       final guest = await _guestFromAuth(cred.user!);
       _emit(guest);
@@ -216,6 +263,7 @@ class AuthService {
   }
 
   void dispose() {
+    _bootstrapGuard?.cancel();
     _authSub?.cancel();
     _out.close();
   }
