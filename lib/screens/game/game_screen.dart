@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../models/game_model.dart';
@@ -30,15 +31,146 @@ class GameScreen extends StatelessWidget {
       stream: db.streamGame(gameId),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Scaffold(body: Center(child: Text('Error: ${snapshot.error}')));
-        }
-        if (!snapshot.hasData) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return _MatchProblem(
+            title: 'Could not open that match',
+            detail: '${snapshot.error}',
+          );
         }
 
-        final game = snapshot.data!;
+        // Waiting is the connecting state. A null value once connected means
+        // the document is not there, which is a dead link rather than a wait.
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const _MatchLoading();
+        }
+
+        final game = snapshot.data;
+        if (game == null) {
+          return _MatchProblem(
+            title: 'That match is not here',
+            detail: 'The link may be out of date, or the table was cleared '
+                'away. Code: $gameId',
+          );
+        }
+
         return _GameScreenContent(game: game, currentUser: currentUser);
       },
+    );
+  }
+}
+
+/// Loading a match, with a way out if the connection never lands so nobody
+/// is left staring at a spinner.
+class _MatchLoading extends StatefulWidget {
+  const _MatchLoading();
+
+  @override
+  State<_MatchLoading> createState() => _MatchLoadingState();
+}
+
+class _MatchLoadingState extends State<_MatchLoading> {
+  static const _patience = Duration(seconds: 8);
+
+  Timer? _slow;
+  bool _takingTooLong = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _slow = Timer(_patience, () {
+      if (mounted) setState(() => _takingTooLong = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _slow?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 20),
+              Text(
+                _takingTooLong ? 'Still reaching the table' : 'Opening match',
+                style: theme.textTheme.titleMedium,
+              ),
+              if (_takingTooLong) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'This is taking longer than it should. Check your connection, '
+                  'or head back and open the match from the menu.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: AppPalette.inkSoft),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton(
+                  onPressed: () => context.go('/'),
+                  child: const Text('Back to menu'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A dead link or a failed read, explained rather than left spinning.
+class _MatchProblem extends StatelessWidget {
+  final String title;
+  final String detail;
+
+  const _MatchProblem({required this.title, required this.detail});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.link_off, size: 40, color: AppPalette.inkSoft),
+                const SizedBox(height: 16),
+                Text(
+                  title,
+                  style: theme.textTheme.headlineSmall,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  detail,
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: AppPalette.inkSoft),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: () => context.go('/'),
+                  child: const Text('Back to menu'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
