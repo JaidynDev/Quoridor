@@ -1,11 +1,11 @@
 {
-    "name": "workspace",
-    "short_name": "workspace",
+    "name": "Quoridor — Jaidyn Projects",
+    "short_name": "Quoridor",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F6EBD9",
+    "theme_color": "#176B5B",
+    "description": "Independent Quoridor implementation by Jaidyn Landry.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

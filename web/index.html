@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -18,18 +18,18 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Play Quoridor with friends. Independent implementation by Jaidyn Landry; the original board game and its IP belong to their respective owners.">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="workspace">
+  <meta name="apple-mobile-web-app-title" content="Quoridor">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>workspace</title>
+  <title>Quoridor — Jaidyn Projects</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -37,12 +37,15 @@
     // Drop a stale Flutter service worker so deploys are not stuck on an old bundle.
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function (regs) {
-        regs.forEach(function (reg) { reg.unregister(); });
+        regs.forEach(function (reg) {
+          if (reg.scope === new URL('./', document.baseURI).href) reg.unregister();
+        });
       });
     }
     if (window.caches) {
       caches.keys().then(function (keys) {
-        keys.forEach(function (key) { caches.delete(key); });
+        keys.filter(function (key) { return key.startsWith('flutter-'); })
+          .forEach(function (key) { caches.delete(key); });
       });
     }
   </script>

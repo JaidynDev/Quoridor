@@ -8,7 +8,8 @@ import '../../theme/app_theme.dart';
 import '../../widgets/how_to_play.dart';
 
 class LobbyScreen extends StatefulWidget {
-  const LobbyScreen({super.key});
+  final String? initialGameCode;
+  const LobbyScreen({super.key, this.initialGameCode});
 
   @override
   State<LobbyScreen> createState() => _LobbyScreenState();
@@ -17,6 +18,12 @@ class LobbyScreen extends StatefulWidget {
 class _LobbyScreenState extends State<LobbyScreen> {
   final _joinController = TextEditingController();
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _joinController.text = widget.initialGameCode ?? '';
+  }
 
   @override
   void dispose() {
@@ -41,7 +48,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
+            .showSnackBar(const SnackBar(content: Text('Could not create a match. Check your connection and try again.')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -62,7 +69,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
+            .showSnackBar(const SnackBar(content: Text('Could not join this match. Check the code; the table may already be full or started.')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

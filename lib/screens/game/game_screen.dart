@@ -31,8 +31,14 @@ class GameScreen extends StatelessWidget {
         if (snapshot.hasError) {
           return Scaffold(body: Center(child: Text('Error: ${snapshot.error}')));
         }
-        if (!snapshot.hasData) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+        if (!snapshot.hasData) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Match not found')),
+            body: const Center(child: Text('This match is no longer available. Check the invitation code.')),
+          );
         }
 
         final game = snapshot.data!;
@@ -58,7 +64,10 @@ class _GameScreenContent extends StatelessWidget {
   void _onMenuSelected(BuildContext context, String value) {
     switch (value) {
       case 'share':
-        Share.share('Join my Quoridor game! Code: ${game.id}');
+        final link = Uri.parse('https://jaidyn.online/quoridor/').replace(
+          fragment: Uri(path: '/lobby', queryParameters: {'code': game.id}).toString(),
+        );
+        Share.share('Join my Quoridor game: $link');
       case 'copy':
         Clipboard.setData(ClipboardData(text: game.id));
         ScaffoldMessenger.of(context).showSnackBar(
@@ -146,7 +155,7 @@ class _GameScreenContent extends StatelessWidget {
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                       leading: Icon(Icons.share, size: 20),
-                      title: Text('Share code'),
+                      title: Text('Share game link'),
                     ),
                   ),
                   const PopupMenuItem(

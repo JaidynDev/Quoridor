@@ -121,7 +121,7 @@ class _AppRouterState extends State<AppRouter> {
         ),
         GoRoute(
           path: '/lobby',
-          builder: (context, state) => const LobbyScreen(),
+          builder: (context, state) => LobbyScreen(initialGameCode: state.uri.queryParameters['code']),
         ),
         GoRoute(
           path: '/friends',
